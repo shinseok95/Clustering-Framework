@@ -2,6 +2,7 @@
 
 import base64
 import datetime
+import time
 import io
 import os
 import keras
@@ -30,7 +31,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.metrics import silhouette_samples
 from sklearn.datasets import make_blobs
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.neighbors.nearest_centroid import NearestCentroid
+from sklearn.neighbors import NearestCentroid
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN
@@ -40,7 +41,7 @@ from math import sqrt
 from scipy import stats
 from scipy.cluster import vq
 from scipy.spatial.distance import cdist
-from sklearn.datasets.samples_generator import make_blobs
+from sklearn.datasets import make_blobs
 
 from tensorflow.python.keras.backend import eager_learning_phase_scope
 from keras.engine.topology import Layer
@@ -54,7 +55,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.preprocessing.image import load_img, array_to_img, img_to_array, ImageDataGenerator
 from keras import optimizers
 
-#Dash에 필요한 library
+# Dash에 필요한 library
 
 from dash.dependencies import Input, Output, State
 import dash_table
@@ -82,14 +83,16 @@ import dash_html_components as html
 # Multi-dropdown options
 from controls import COUNTIES, WELL_STATUSES, WELL_TYPES, WELL_COLORS
 
-
+# Download
+from flask import Flask, send_file
+from dash_extensions import Download
 
 # 전역 변수
 
 
 np.set_printoptions(threshold=np.inf)  # ...없이 출력하기
 
-PATH=None
+PATH = None
 df = None
 
 dataset = None
@@ -98,8 +101,11 @@ predict = None
 dataset_pure = None
 preprocessing_csv = None
 process_label = None
+csv_file_name = None
+split_name = None
 
-dataset_pure_list =None
+autoencoder_hist = None
+dataset_pure_list = None
 cutting_dataset = None
 cutting_dataset_pure = None
 embedding_csv = None
@@ -122,8 +128,9 @@ Data Proprocessing(0) : CSV로부터 DATA 입력받기
 path : csv 파일의 경로
 column : 데이터를 나타내는 칼럼명
 """
-def align_timeseries_dataset(path, value_col, process_col=None):
 
+
+def align_timeseries_dataset(path, value_col, process_col=None):
     if path == None or value_col == None:
         return
 
@@ -274,7 +281,7 @@ def DTW_resize_algorithm(long_ts_data, short_ts_data):
 
             if path_coordinates[step][1] == path_coordinates[j][1]:
                 similarity_degree_path[i] = similarity_degree_path[i] + (
-                            long_ts_data[path_coordinates[j][1]] - short_ts_data[path_coordinates[j][0]])
+                        long_ts_data[path_coordinates[j][1]] - short_ts_data[path_coordinates[j][0]])
                 step = j
                 continue
 
@@ -425,12 +432,14 @@ IMG_SIZE : 이미지사이즈(default = 64)
 
 
 def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', IMG_SIZE_FLAG='1', TEST_SIZE=500):
+    global autoencoder_hist
+
     np.random.seed(1)
     tf.random.set_seed(1)
 
     latent_dim = 2
-
     dataset_img = []
+    autoencoder_hist = []
 
     if IMAGING_FLAG == '1':
         for i in range(len(dataset)):
@@ -528,9 +537,24 @@ def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', I
     autoencoder = Model(encoder_input, decoder_outputs)
     autoencoder.compile(optimizer=tf.keras.optimizers.Adam(LEARNING_LATE), loss=tf.keras.losses.MeanSquaredError())
 
+    # hist 저장
+    for i in range(1, EPOCHS + 1):
+        start = time.perf_counter()
+        hist = autoencoder.fit(train, train, batch_size=BATCH_SIZE, epochs=1, validation_data=(test, test),
+                               shuffle=True, callbacks=[ae_callback_early, ae_callback_best])
+        end = time.perf_counter()
+
+        execution_time = round(end - start, 3)
+
+        result = str(i) + " / " + str(EPOCHS) + " [ " + str(execution_time) + " ms ]" + " - loss : " + str(
+            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4))
+
+        print(result)
+        autoencoder_hist.append(result)
+
     autoencoder.summary()
-    hist = autoencoder.fit(train, train, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(test, test),
-                           shuffle=True, callbacks=[ae_callback_early, ae_callback_best])
+    # hist = autoencoder.fit(train, train, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(test, test),
+    #                       shuffle=True, callbacks=[ae_callback_early, ae_callback_best])
 
     # 이미지 그리기
 
@@ -539,14 +563,20 @@ def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', I
     # draw_image_data(test,"Original Image",IMG_SIZE)
     # draw_image_data(decoded_images,"Reproduction Image",IMG_SIZE)
 
-    # 인코딩된 잠재 벡터
+    autoencoder_hist.append("DONE!")
 
+    # 인코딩된 잠재 벡터
     get_embedded = K.function([autoencoder.get_layer('input').input],
                               [autoencoder.get_layer('embedded').output])
 
     dataset_dimension = np.vstack(get_embedded([dataset_image]))
     dataset_dimension_data = np.vstack([dataset_dimension])
     dataset_dimension_data = dataset_dimension_data.reshape(-1, latent_dim)
+
+    # history 정보 출력
+    print(" history 정보 출력 ")
+    for i in range(0, EPOCHS):
+        print(i + 1, ' / ', EPOCHS, autoencoder_hist[i])
 
     return dataset_dimension_data
 
@@ -599,10 +629,10 @@ MAX_CLUSTER_SIZE=최대 군집 개수
 """
 
 
-def clustering_KMEANS(dimension_data, n_cluster,MAX_CLUSTER_SIZE=10):
+def clustering_KMEANS(dimension_data, n_cluster, MAX_CLUSTER_SIZE=10):
     # class_dimension_data=잠재벡터,num_cluster=최대 군집 개수
 
-    #n_cluster_list = cal_Silhouette(dimension_data, MAX_CLUSTER_SIZE, 5)
+    # n_cluster_list = cal_Silhouette(dimension_data, MAX_CLUSTER_SIZE, 5)
     # best_cluster = n_cluster_list[0]
 
     dimension_data = dimension_data.reshape(-1, 2)
@@ -612,7 +642,7 @@ def clustering_KMEANS(dimension_data, n_cluster,MAX_CLUSTER_SIZE=10):
 
     predict = Kmean.predict(dimension_data)
 
-    #for center in n_cluster_list:
+    # for center in n_cluster_list:
     #    draw_cluster_and_center(dimension_data, center)
 
     return predict
@@ -692,14 +722,16 @@ def cal_Silhouette(data, max_cluster_num, cluster_num):
         max.append([i, silhouette_score(data, km_labels)])
 
         max.sort(key=lambda x: x[1], reverse=True)
-    print(max)
+    print("max : ", max)
     # 실루엣 계수 높은 상위 (clust_num)개만 추출해서 클러스터 개수 저장
     n_cluster_list = []
+    n_cluster_value = []
 
     for i in max[0:cluster_num]:
         n_cluster_list.append(i[0])
+        n_cluster_value.append(round(i[1]*100,2))
 
-    return n_cluster_list
+    return n_cluster_list,n_cluster_value
 
 
 def draw_inertia_kshape(dimension_data, MAX_CLUSTER_SIZE=10):
@@ -892,7 +924,6 @@ def show_index_to_plot(cutting_dataset, process_label, index):
 
 
 def find_centroid_index(embedding, predict):
-
     X = np.array(embedding)
     y = np.array(predict)
     clf = NearestCentroid()
@@ -905,6 +936,7 @@ def find_centroid_index(embedding, predict):
 
     if predict_set[0] == -1:
         del predict_set[0]
+        centroid = centroid[1:]
 
     for i in predict_set:
         closet_idx = None
@@ -924,11 +956,17 @@ def find_centroid_index(embedding, predict):
         centroid_idx.append(closet_idx)
     return centroid_idx, centroid
 
+
 #############################################################
 
+
 app = dash.Dash(
-    __name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}]
+    __name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}],
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
+app.css.config.serve_locally = True
+
+# app.css.append_css({"external_url":"https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.csshttps://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"})
 server = app.server
 
 # Create controls
@@ -945,7 +983,6 @@ well_type_options = [
     {"label": str(WELL_TYPES[well_type]), "value": str(well_type)}
     for well_type in WELL_TYPES
 ]
-
 
 # Create app layout
 app.layout = html.Div(
@@ -1003,97 +1040,142 @@ app.layout = html.Div(
                     className="custom-tab",
                     selected_className="custom-tab--selected",
                     children=[
-        html.Div(
-            [
-                html.Div(
-                    [
-                        dcc.Upload(
-                            id='upload-data',
-                            children=html.Div([
-                                'Drag and Drop or ',
-                                html.A('Select Files')
-                            ]),
-                            style={
-                                'lineHeight': '60px',
-                                'borderWidth': '1px',
-                                'borderStyle': 'dashed',
-                                'borderRadius': '5px',
-                                'textAlign': 'center',
-                            },
-                            # Allow multiple files to be uploaded
-                            multiple=True, className="control_label"
-                        ),
-                        html.Label('INPUT Value Column Name', className="dcc_control"),
-                        dcc.Input(id='VC', type='text', value='Value', className="dcc_control"),
-                        html.Button('Show Graph', id='graph-btn', n_clicks=0, className="dcc_btn"),
-                        html.Label('Have Process?', className="dcc_control"),
-                        dcc.RadioItems(id='chk-process', options=[{'label': 'O', 'value': 'o'}, {'label': 'X', 'value': 'x'}]),
-                        html.Label([
-                            "INPUT Process Column Name",
-                            dcc.Input(id='PCN', className="dcc_control")
-                        ],id='PCN-label'),
-                        html.Label([
-                            "Cutting method",
-                            dcc.Dropdown(
-                                id='cut_radio',
-                                options=[{'label': i, 'value': i} for i in
-                                         ['Truncation', 'Padding', 'DTW']],
-                                value='', className="dcc_control"
-                            )
-                        ], id='CTM-label'),
+                        html.Div(
+                            [
+                                dbc.Row([
+                                    dbc.Col(
+                                        html.Div(
+                                            [
+                                                dcc.Upload(
+                                                    id='upload-data',
+                                                    children=html.Div([
+                                                        'Drag and Drop or ',
+                                                        html.A('Select Files')
+                                                    ]),
+                                                    style={
+                                                        'lineHeight': '60px',
+                                                        'borderWidth': '1px',
+                                                        'borderStyle': 'dashed',
+                                                        'borderRadius': '5px',
+                                                        'textAlign': 'center',
+                                                    },
+                                                    # Allow multiple files to be uploaded
+                                                    multiple=True, className="control_label"
+                                                ),
+                                                html.Label('INPUT Value Column Name', className="dcc_control"),
+                                                dcc.Input(id='VC', type='text', value='Value', className="dcc_control"),
+                                                html.Button('Show Graph', id='graph-btn', n_clicks=0,
+                                                            className="dcc_btn"),
+                                                html.Label('Have Process?', className="dcc_control"),
+                                                dcc.RadioItems(id='chk-process', options=[{'label': 'O', 'value': 'o'},
+                                                                                          {'label': 'X',
+                                                                                           'value': 'x'}]),
+                                                html.Label([
+                                                    "INPUT Process Column Name",
+                                                    dcc.Input(id='PCN', className="dcc_control")
+                                                ], id='PCN-label'),
+                                                html.Label([
+                                                    "Cutting method",
+                                                    dcc.Dropdown(
+                                                        id='cut_radio',
+                                                        options=[{'label': i, 'value': i} for i in
+                                                                 ['Truncation', 'Padding', 'DTW']],
+                                                        value='', className="dcc_control"
+                                                    )
+                                                ], id='CTM-label'),
 
-                        html.Label([
-                            "TIME SLICE",
-                            dcc.Input(id='TS', type='number', value=172, className="dcc_control")
-                        ],id='TS-label'),
-                        html.Label([
-                            "SHIFT SIZE",
-                            dcc.Input(id='SS', type='number', value=172, className="dcc_control")
-                        ],id='SS-label'),
-                        html.Button('Slice', id='slice-btn', n_clicks=0, className="dcc_btn"),
-                        html.Button('Download', id='download-btn', n_clicks=0, className="dcc_btn"),
-                        html.Div(id='output-data-upload'),
-                        html.Div(id='graph'),
-                        html.Div([
-                            dbc.Modal(
-                                [
-                                    dbc.ModalHeader(html.H2("Alert")),
-                                    dbc.ModalBody(html.H4("Cutting Success")),
-                                    dbc.ModalFooter(
-                                        dbc.Button("Close", id="close-md", className="ml-auto")
-                                    ),
-                                ],
-                                id="modal",
-                                size="sm",
-                                is_open=False,
-                                backdrop=True,
-                                # True, False or Static for modal to not be closed by clicking on backdrop
-                                scrollable=True,  # False or True if modal has a lot of text
-                                centered=True,  # True, False
-                                fade=True
-                            )
-                        ]),
-                    ],
-                    className="pretty_container_side four columns",
-                    id="cross-filter-options",
-                ),
-                html.Div(
-                    [
-                        html.Div(
-                            id="dataTableContainer",
-                            className="pretty_container_preprocessing_df",
+                                                html.Label([
+                                                    "TIME SLICE",
+                                                    dcc.Input(id='TS', type='number', value=172,
+                                                              className="dcc_control")
+                                                ], id='TS-label'),
+                                                html.Label([
+                                                    "SHIFT SIZE",
+                                                    dcc.Input(id='SS', type='number', value=172,
+                                                              className="dcc_control")
+                                                ], id='SS-label'),
+                                                html.Button('Slice', id='slice-btn', n_clicks=0, className="dcc_btn"),
+                                                html.A('Download', id='download-link', n_clicks=0, className="dcc_btn"),
+                                                html.Button("Download", id="download-btn"),
+                                                Download(id="download"),
+                                                html.Div(id='output-data-upload'),
+                                                html.Div(id='graph'),
+                                                html.Div([
+                                                    dbc.Modal(
+                                                        [
+                                                            dbc.ModalHeader(html.H2("Alert")),
+                                                            dbc.ModalBody(html.H4("Cutting Success")),
+                                                            dbc.ModalFooter(
+                                                                dbc.Button("Close", id="close-md", className="ml-auto")
+                                                            ),
+                                                        ],
+                                                        id="modal",
+                                                        size="sm",
+                                                        is_open=False,
+                                                        backdrop=True,
+                                                        # True, False or Static for modal to not be closed by clicking on backdrop
+                                                        scrollable=True,  # False or True if modal has a lot of text
+                                                        centered=True,  # True, False
+                                                        fade=True
+                                                    )
+                                                ]),
+                                            ],
+                                            className="pretty_container_side",
+                                            id="cross-filter-options",
+                                        ),width=4),
+
+                                    dbc.Col([
+                                        html.Div([
+                                            html.Div(
+                                                id="dataTableContainer",
+                                                className="pretty_container_preprocessing_df"
+                                            ),
+                                            html.Div(
+                                                id="GraphContainer",
+                                                className="pretty_container_preprocessing_graph",
+                                            )
+                                        ], id="preprocessing_right-column",
+                                            className="eight_columns2",
+                                        ),
+                                    ],width=8
+                                        ##
+                                        # dbc.Row(
+                                        #    dbc.Col(
+                                        #        html.Div(
+                                        #            id="dataTableContainer",
+                                        #            className="pretty_container_preprocessing_df"
+                                        #        )
+                                        #    )
+                                        # ),
+                                        # dbc.Row(
+                                        #    dbc.Col(html.Div(
+                                        #        id="GraphContainer",
+                                        #        className="pretty_container_preprocessing_graph",
+                                        #    ))
+                                        # )
+                                        ##
+
+                                    )], no_gutters=True,
+                                    #className="no-gutter"
+                                )
+                                # html.Div(
+                                #    [
+                                # html.Div(
+                                #    id="dataTableContainer",
+                                #    className="pretty_container_preprocessing_df",
+                                # ),
+                                # html.Div(
+                                #    id="GraphContainer",
+                                #    className="pretty_container_preprocessing_graph",
+                                # ),
+                                #   ],
+                                # id="preprocessing_right-column",
+                                # className="eight columns",
+                                # ),
+                            ],
+                            # className="row flex-display",
                         ),
-                        html.Div(
-                            id="GraphContainer",
-                            className="pretty_container_preprocessing_graph",
-                        ),
-                    ],
-                    id="preprocessing_right-column",
-                    className="eight columns",
-                ),
-            ],
-            className="row flex-display",
-        ), ]),
+                    ]),
                 dcc.Tab(
                     id="Embedding-tab",
                     label="Embedding",
@@ -1108,7 +1190,7 @@ app.layout = html.Div(
                                     dcc.Dropdown(
                                         id='embedding_radio',
                                         options=[{'label': i, 'value': i} for i in ['Autoencoder', 'PCA', 'UMAP']],
-                                        value='Autoencoder',className="dcc_control"
+                                        value='Autoencoder', className="dcc_control"
                                     )
                                 ]),
                                 html.Div(html.H4('Autoencoder'), id='Autoencoder_label', className="dcc_control"),
@@ -1122,16 +1204,20 @@ app.layout = html.Div(
                                 html.Div(html.Label('Epoch'), id='Epoch_label', className="dcc_control"),
                                 dcc.Input(id='Epoch_input', type='number', className="dcc_control"),
 
-                                html.Div(html.Label('Test Data Size'), id='Test_Data_Size_label', className="dcc_control"),
+                                html.Div(html.Label('Test Data Size'), id='Test_Data_Size_label',
+                                         className="dcc_control"),
                                 dcc.Input(id='Test_Data_Size_input', type='number', className="dcc_control"),
 
                                 html.Div(html.Label('Imaging Algorithm'), id='Imaging_Algorithm_label',
                                          className="dcc_control"),
-                                dcc.RadioItems(id='IMAGING_FLAG', options=[{'label': 'RP', 'value': '1'}, {'label': 'GAF', 'value': '2'}]),
+                                dcc.RadioItems(id='IMAGING_FLAG',
+                                               options=[{'label': 'RP', 'value': '1'}, {'label': 'GAF', 'value': '2'}]),
 
                                 html.Div(html.Label('IMAGING_FLAG'), id='Imaging_Size_label',
                                          className="dcc_control"),
-                                dcc.RadioItems(id='IMAGING_SIZE_FLAG', options=[{'label': 'small', 'value': '1'}, {'label': 'middle', 'value': '2'},{'label': 'large', 'value': '3'}]),
+                                dcc.RadioItems(id='IMAGING_SIZE_FLAG', options=[{'label': 'small', 'value': '1'},
+                                                                                {'label': 'middle', 'value': '2'},
+                                                                                {'label': 'large', 'value': '3'}]),
 
                                 html.Div(html.Label('n_neighbors'), id='n_neighbors_label'),
                                 dcc.Input(id='n_neighbors_input', type='number'),
@@ -1139,17 +1225,22 @@ app.layout = html.Div(
                                 html.Div(html.Label('min_dist'), id='min_dist_label', className="dcc_control"),
                                 dcc.Input(id='min_dist_input', type='number', className="dcc_control"),
 
-                                html.Button('Embedding', id='embedding-btn', n_clicks=0,className="dcc_btn")
+                                html.Button('Embedding', id='embedding-btn', n_clicks=0, className="dcc_btn"),
+
+                                html.Div(id='ae_history_div', children=[
+                                    html.Label('Autoencoder is Updating',id='ae_hist'),
+                                    dcc.Interval(id='interval_component',interval= 1000,n_intervals=0)
+                                ], className="scroll_container_hist"),
 
                             ], className="pretty_container_side four columns",
                             ),
 
                             html.Div([
-                                html.Div(id='learn', children=[],className="pretty_container_embedding_graph")
+                                html.Div(id='learn', children=[], className="pretty_container_embedding_graph")
                             ],
-                            id="embedding_right-column",
-                            className="eight columns",
-                        ),
+                                id="embedding_right-column",
+                                className="eight columns",
+                            ),
                         ]
                             , className="row flex-display"
                         )]),
@@ -1181,26 +1272,35 @@ app.layout = html.Div(
                                 html.Div(html.Label('MIN_SAMPLES'), id='MIN_SAMPLES_label', className="dcc_control"),
                                 dcc.Input(id='MIN_SAMPLES_input', type='number', className="dcc_control"),
 
-                                html.Button('Clustering', id='Clustering-btn', n_clicks=0,className="dcc_btn" ),
-                            ],className="pretty_container_side four columns",
+                                html.Button('Clustering', id='Clustering-btn', n_clicks=0, className="dcc_btn"),
+                                html.Div(html.Label('Silhouette Coefficient'), id='Silhouette_Coefficient_label'),
+                                dcc.Dropdown(
+                                        id='k-means_clustering_radio',
+                                        options=[],
+                                        value=''
+                                ),
+                            ], className="pretty_container_side four columns",
 
                             ),
                             html.Div([
-                                html.Div(id='Cluster_Plot', children=[], className="scroll_container_plot",),
+                                html.Div(id='Cluster_Plot', children=[], className="scroll_container_plot", ),
                                 html.Div(id="Cluster_Graph", children=[], className="scroll_container_graph"),
+                                html.Div(id='K_means_Cluster_Plot', children=[], className="scroll_container_plot", ),
+                                html.Div(id="K_means_Cluster_Graph", children=[], className="scroll_container_graph"),
                                 html.Div(id="Outlier_Plot", children=[], className="scroll_container_outlier")
                             ],
-                            id="clustering_right-column",
-                            className="eight columns",
+                                id="clustering_right-column",
+                                className="eight columns",
                             ),
                         ],
                             className="row flex-display")
-                ])]
+                    ])]
         )
-        ],
+    ],
     id="mainContainer",
     style={"display": "flex", "flex-direction": "column"},
 )
+
 
 # # Create callbacks
 # app.clientside_callback(
@@ -1208,7 +1308,6 @@ app.layout = html.Div(
 #     Output("output-clientside", "children"),
 #     [Input("count_graph", "figure")],
 # )
-
 
 def parse_contents(contents, filename, date):
     content_type, content_string = contents.split(',')
@@ -1225,7 +1324,7 @@ def parse_contents(contents, filename, date):
 
         elif 'xls' in filename:
             # Assume that the user uploaded an excel file
-            df = pd.read_excel(io.BytesIO(decoded),engine='python',encoding='euc-kr')
+            df = pd.read_excel(io.BytesIO(decoded), engine='python', encoding='euc-kr')
     except Exception as e:
         print(e)
         return html.Div([
@@ -1246,10 +1345,15 @@ def parse_contents(contents, filename, date):
               State('upload-data', 'filename'),
               State('upload-data', 'last_modified'))
 def update_output(list_of_contents, list_of_names, list_of_dates):
+    global csv_file_name
+
     if list_of_contents is not None:
         children = [
             parse_contents(c, n, d) for c, n, d in
             zip(list_of_contents, list_of_names, list_of_dates)]
+
+        csv_file_name = list_of_names
+        print("csv file name : ", csv_file_name)
         return children
 
 
@@ -1273,6 +1377,7 @@ def show_graph(n_clicks, VC):
         children = [
             dcc.Graph(
                 id='example-graph',
+                style={"width": "100%", "height": "100%"},
                 figure=px.line(df[VC])
             )
         ]
@@ -1280,12 +1385,14 @@ def show_graph(n_clicks, VC):
     else:
         return
 
+
 # slice 모달 창 띄우기
-@app.callback(Output('modal', "is_open"),
+@app.callback([Output('modal', "is_open"),
+               Output('download-link', 'href')],
               [Input('slice-btn', 'n_clicks'),
                Input('cut_radio', 'value'),
-               Input('PCN','value'),
-               Input('VC','value'),
+               Input('PCN', 'value'),
+               Input('VC', 'value'),
                Input('TS', 'value'),
                Input('SS', 'value'),
                Input('close-md', 'n_clicks'),
@@ -1300,11 +1407,21 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global dataset_pure_list
     global cutting_dataset
     global cutting_dataset_pure
+    global csv_file_name
+    global split_name
     # global dataset_image
+
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
     if 'slice-btn' in changed_id:
+        split_name = str(csv_file_name).split("'")
+
+        # href = '/dash/urlToDownload?value={}'.format(split_name[1])
+        # href = '/dash/urlToDownload'
+        href = ''
+        print("href: ", href)
+
         if n_clicks or n_clicks2:
             # print 는 그냥 값 확인하려고 써놓은 것들입니닷
             print("is open: ", is_open)
@@ -1344,13 +1461,46 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
                         cutting_dataset_pure = data_dtw(dataset_pure)
 
             is_open = not is_open
-            return is_open
+
+            return [is_open, href]
 
         else:
             print("else ", is_open)
-            return is_open
+            return [is_open, ' ']
     else:
+        return ['', '']
+
+
+# 전처리 파일 다운로드 링크
+#@app.server.route('/dash/urlToDownload')
+#def download_csv():
+#    global preprocessing_csv
+#    global split_name
+
+#    str_io = io.StringIO()
+#    preprocessing_csv.to_csv(str_io)
+
+#    mem = io.BytesIO()
+#    mem.write(str_io.getvalue().encode('utf-8'))
+#    mem.seek(0)
+#    str_io.close()
+
+    # file_name= "Preprocessing" + (str(split_name[1]))
+    # print("file name: ",file_name)
+#    return send_file(mem, as_attachment=True,
+#                     attachment_filename="Preprocessing.csv",
+#                     mimetype='text/csv')
+
+from dash_extensions.snippets import send_data_frame
+@app.callback(Output("download","data"),
+              Input("download-btn","n_clicks"))
+def func(n_clicks):
+    global preprocessing_csv
+    if preprocessing_csv is None:
         return
+    else:
+        return send_data_frame(preprocessing_csv.to_csv,'Preprocess.csv')
+
 
 @app.callback([Output('cut_radio', 'style'),
                Output('PCN', 'style'),
@@ -1364,10 +1514,11 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
               Input('chk-process', 'value'))
 def preprocessing(value):
     if value == 'o':
-        return [{'display': 'block'}, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, {'display': 'block'}]
+        return [{'display': 'block'}, {'display': 'block'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, {'display': 'block'}]
     else:
-        return [{'display': 'none'}, {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'none'}]
-
+        return [{'display': 'none'}, {'display': 'none'}, {'display': 'block'}, {'display': 'block'},
+                {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'none'}]
 
 
 @app.callback([Output('Autoencoder_label', 'children'),
@@ -1379,6 +1530,7 @@ def preprocessing(value):
                Output('IMAGING_SIZE_FLAG', 'style'),
                Output('n_neighbors_input', 'style'),
                Output('min_dist_input', 'style'),
+               Output('ae_history_div', 'style'),
 
                Output('Learning_Rate_label', 'style'),
                Output('Batch_Size_label', 'style'),
@@ -1395,25 +1547,25 @@ def show_vector_parameter(embedding_radio):
         return [html.H4('Autoencoder'), {'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'block'}, {'display': 'block'},
+                {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "PCA":
-        return [html.H4('PCA'),{'display': 'none'},
+        return [html.H4('PCA'), {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "UMAP":
-        return [html.H4('UMAP'),{'display': 'none'},
+        return [html.H4('UMAP'), {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'block'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'block'},{'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, ]
 
@@ -1434,15 +1586,21 @@ def show_vector_parameter(embedding_radio):
               Input('n_neighbors_input', 'value'),
               Input('min_dist_input', 'value'),
               )
-def deep_learning(n_clicks, embedding_radio,learning_rate, batch_size, epoch,test_data_size,IMAGING_FLAG,IMAGING_SIZE_FLAG,n_neighbors,min_dist):
+def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, test_data_size, IMAGING_FLAG,
+                  IMAGING_SIZE_FLAG, n_neighbors, min_dist):
     global cutting_dataset
     global embedding_data
+    global autoencoder_hist
 
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     if 'embedding-btn' in changed_id:
         if embedding_radio == 'Autoencoder':
-            embedding_data = embedding_AE(cutting_dataset, learning_rate, batch_size, epoch,IMAGING_FLAG,IMAGING_SIZE_FLAG,TEST_SIZE=test_data_size)
+
+            autoencoder_hist = []
+
+            embedding_data = embedding_AE(cutting_dataset, learning_rate, batch_size, epoch, IMAGING_FLAG,
+                                          IMAGING_SIZE_FLAG, TEST_SIZE=test_data_size)
 
         elif embedding_radio == 'PCA':
             embedding_data = embedding_PCA(cutting_dataset)
@@ -1453,57 +1611,78 @@ def deep_learning(n_clicks, embedding_radio,learning_rate, batch_size, epoch,tes
         children = [
             dcc.Graph(
                 id='embedding-result',
-                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=700)
+                style={"width": "100%", "height": "100%"},
+                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1])
             )
         ]
         return children
     else:
         return
 
+@app.callback(Output('ae_hist','children'),
+              Input('interval_component','n_intervals'))
+def update_hist(n_invervals):
+    global autoencoder_hist
+    return autoencoder_hist
+
 
 @app.callback(Output('K-Means_label', 'children'),
               Output('MAX_CLUSTER_SIZE_input', 'style'),
+              Output('k-means_clustering_radio', 'style'),
+
               Output('EPS_input', 'style'),
               Output('MIN_SAMPLES_input', 'style'),
 
               Output('MAX_CLUSTER_SIZE_label', 'style'),
               Output('EPS_label', 'style'),
               Output('MIN_SAMPLES_label', 'style'),
+              Output('Silhouette_Coefficient_label', 'style'),
 
+            Output('Cluster_Plot', 'style'),
+            Output('Cluster_Graph', 'style'),
+            Output('K_means_Cluster_Plot', 'style'),
+            Output('K_means_Cluster_Graph', 'style'),
               Output('Outlier_Plot', 'style'),
 
               Input('clustering_radio', 'value'))
 def cluster_option(clustering_radio):
-
     if clustering_radio == 'K-Means':
-        return [html.H4('K-MEANS'), {'display': 'block'},
+        return [html.H4('K-MEANS'), {'display': 'block'},{'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'none'}, {'display': 'none'},{'display': 'none'}]
+                {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
+                {'display': 'none'}, {'display': 'none'},{'display': 'block'},
+                {'display': 'block'},{'display': 'none'}]
 
     elif clustering_radio == 'DBSCAN':
 
-        return [html.H4('DBSCAN'), {'display': 'none'},
+        return [html.H4('DBSCAN'), {'display': 'none'},{'display': 'none'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
-                {'display': 'block'}, {'display': 'block'}, {'display': 'block'}]
+                {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
+                {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
+                {'display': 'none'},{'display': 'block'}]
 
     elif clustering_radio == 'K-shape':
-        return [html.H4('K-SHAPE'),{'display': 'block'},
+        return [html.H4('K-SHAPE'), {'display': 'block'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'none'}, {'display': 'none'},{'display': 'none'}]
+                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'block'},{'display': 'block'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'}]
 
 
 # cluster-result 는 그래프, radio_cluster_num, options 는 라디오 버튼에 동적으로 추가한 options 이고
 # 'radio_cluster_num', 'value' 는 기본값을 뭘로 설정할 지, 'radio_cluster_div','style' 는 처음에 아무거나 넣어서 만들었던 라디오 버튼을
 # 숨겼다가 클러스터링 하고 나서 보이게 하려고 한거에요!
 @app.callback([Output('Cluster_Plot', 'children'),
-              Output('Cluster_Graph', 'children'),
-              Output('Outlier_Plot', 'children')],
+               Output('Cluster_Graph', 'children'),
+               Output('Outlier_Plot', 'children'),
+              Output('k-means_clustering_radio', 'options')],
+
               [Input('Clustering-btn', 'n_clicks'),
                Input('clustering_radio', 'value'),
                Input('MAX_CLUSTER_SIZE_input', 'value'),
                Input('EPS_input', 'value'),
-               Input('MIN_SAMPLES_input', 'value'),])
-def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
+               Input('MIN_SAMPLES_input', 'value'), ])
+def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
     global embedding_data
     global predict
     global dataset_pure_list
@@ -1518,15 +1697,20 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
     children_Plot = []
     children_Graph = []
 
-    print(process_label)
+    print("process label: ", process_label)
 
     if 'Clustering-btn' in changed_id:
         if clustering_radio == 'K-Means':
-            cluster_list = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)
+            cluster_list,cluster_value = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)
 
+            options = []
+            for i in range(len(cluster_list)):
+                options.append({'label' : str(cluster_list[i])+' ('+str(cluster_value[i])+'%)', 'value' : str(i)})
+
+            """
             for n_cluster in cluster_list:
 
-                predict = clustering_KMEANS(embedding_data, n_cluster,MAX_CLUSTER_SIZE)
+                predict = clustering_KMEANS(embedding_data, n_cluster, MAX_CLUSTER_SIZE)
                 centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
 
                 if len(set(predict)) > 1:
@@ -1534,11 +1718,11 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
                     for i in centroid_idx:
                         children_Plot.append(
                             dcc.Graph(
-                            id='clustering-plot_'+str(i),
-                            figure=px.line(dataset_pure_list[i],title="Process : "+str(process_label[i]))
-                        ))
+                                id='clustering-plot_' + str(i),
+                                figure=px.line(dataset_pure_list[i], title="Process : " + str(process_label[i]))
+                            ))
 
-                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],width=800, height=400,color=predict)
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
                 fig.add_trace(
                     go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',
                                marker=dict(color='red'), showlegend=False))
@@ -1551,11 +1735,11 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
 
             predict = clustering_KMEANS(embedding_data, cluster_list[0], MAX_CLUSTER_SIZE)
             centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
-
+            """
             # 동적으로 options 에 실루엣 계수 상위 5개 추가
-            #options = [{'label': v, 'value': v} for v in predict]
+            # options = [{'label': v, 'value': v} for v in predict]
 
-            #children = []
+            # children = []
 
             # # 우선 실루엣 계수 제일 높은 거 한 개만 출력되도록 했습니다
             # Kmean = KMeans(n_clusters=cluster_list[0])
@@ -1570,11 +1754,10 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
             #         figure=fig
             #     )]
             # ))
-            return [children_Plot,children_Graph, ""]
+            return ["", "", "",options]
 
         elif clustering_radio == "DBSCAN":
-            predict = clsutering_DBSCAN(embedding_data,EPS,MIN_SAMPLES)
-            centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
+            predict = clsutering_DBSCAN(embedding_data, EPS, MIN_SAMPLES)
 
             children_Plot = []
             children_Graph = []
@@ -1582,22 +1765,34 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
 
             if len(set(predict)) > 1:
 
-                for i in centroid_idx:
+                centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
+
+                for j in range(len(centroid_idx)):
                     children_Plot.append(
                         dcc.Graph(
-                        id='clustering-plot_'+str(i),
-                        figure=px.line(dataset_pure_list[i],title="Process : "+str(process_label[i]))
-                    ))
-            fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
-            fig.add_trace(
+                            id='clustering-plot_' + str(centroid_idx[j]),
+                            style={'display': 'inline-block', "autosize": "false", "width": "33.3333%",
+                                   "height": "100%"},
+                            figure=px.line(dataset_pure_list[centroid_idx[j]], title="DBSCAN Process : " + str(process_label[centroid_idx[j]])+"( {}, {} )".format(round(centroid_value[j][0],2),round(centroid_value[j][1],2)) )
+                        ))
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+                fig.add_trace(
                 go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',
                            marker=dict(color='red'), showlegend=False))
 
-            children_Graph.append(
-                dcc.Graph(
-                    id='dbscan-result',
-                    figure=fig)
-            )
+                children_Graph.append(
+                    dcc.Graph(
+                        id='dbscan-result',
+                        figure=fig)
+                )
+            else:
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+
+                children_Graph.append(
+                    dcc.Graph(
+                        id='dbscan-result',
+                        figure=fig)
+                )
 
             if process_label != None:
 
@@ -1614,43 +1809,106 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE,EPS,MIN_SAMPLES):
                     for idx in outlier_list:
                         outlier_Plot.append(
                             dcc.Graph(
-                                id='outlier-plot_'+str(idx),
-                                figure=px.line(dataset_pure_list[idx],title="Outlier Process : "+str(process_label[idx]))
+                                id='outlier-plot_' + str(idx),
+                                style={'display': 'inline-block', "autosize": "false", "width": "33.3333%",
+                                       "height": "100%"},
+                                figure=px.line(dataset_pure_list[idx],
+                                               title="Outlier Process : " + str(process_label[idx]))
                             ))
 
             # dbscan 에서는 라디오 버튼 안보여야 되니까 style 을 display:none 으로 했어요
-            return [children_Plot,children_Graph,outlier_Plot]
+            return [children_Plot, children_Graph, outlier_Plot,[]]
 
         elif clustering_radio == "K-shape":
 
-            n_cluster = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)[0]
-            predict = clustering_KSHAPE(embedding_data,n_cluster=n_cluster)
+            n_cluster = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)[0][0]
+            predict = clustering_KSHAPE(embedding_data, n_cluster=n_cluster)
 
             children_Plot = []
             children_Graph = []
 
             if len(set(predict)) > 1:
 
-                for i in centroid_idx:
+                for j in range(len(centroid_idx)):
                     children_Plot.append(
                         dcc.Graph(
-                        id='clustering-plot_'+str(i),
-                        figure=px.line(dataset_pure_list[i],title="K-SHAPE Process : "+str(process_label[i]))
-                    ))
+                            id='clustering-plot_' + str(centroid_idx[j]),
+                            figure=px.line(dataset_pure_list[centroid_idx[j]],
+                                           title="K-SHAPE Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
+                                               round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
+                        ))
 
             fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
 
             children_Graph.append(dcc.Graph(
-                    id='kshape-reuslt',
-                    figure=fig
-                )
+                id='kshape-reuslt',
+                figure=fig
+            )
             )
 
-            return [children_Plot,children_Graph,""]
+            return [children_Plot, children_Graph, "",[]]
         else:
             return []
     else:
-        return [children_Plot,children_Graph,""]
+        return [children_Plot, children_Graph, "",[]]
+
+@app.callback([Output('K_means_Cluster_Plot', 'children'),
+               Output('K_means_Cluster_Graph', 'children')],
+              [Input('k-means_clustering_radio', 'value'),
+               Input('MAX_CLUSTER_SIZE_input', 'value')])
+def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
+    global embedding_data
+    global predict
+    global dataset_pure_list
+    global process_label
+
+    global centroid_idx
+    global centroid_value
+
+    if k_means_radio=='':
+        return ["",""]
+
+    i = int(k_means_radio)
+    children_Plot = []
+    children_Graph = []
+    cluster_list, cluster_value = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)
+
+    predict = clustering_KMEANS(embedding_data, cluster_list[i], MAX_CLUSTER_SIZE)
+    centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
+
+    if len(set(predict)) > 1:
+
+        for j in range(len(centroid_idx)):
+            children_Plot.append(
+                dcc.Graph(
+                    id='clustering-plot_' + str(centroid_idx[j]),
+                    style={'display': 'inline-block', "autosize": "false", "width": "33.3333%", "height": "100%"},
+                    figure = px.line(dataset_pure_list[centroid_idx[j]],
+                             title="K-MEANS Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
+                                 round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
+                ))
+
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+        fig.add_trace(go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',marker=dict(color='red'), showlegend=False))
+
+        children_Graph.append(
+            dcc.Graph(
+                id='K-Means-result',
+                figure=fig)
+        )
+
+        predict = clustering_KMEANS(embedding_data, cluster_list[0], MAX_CLUSTER_SIZE)
+        centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
+    else:
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+
+        children_Graph.append(
+            dcc.Graph(
+                id='K-Means-result',
+                figure=fig)
+        )
+
+    return [children_Plot,children_Graph]
 
 """
 @app.callback(Output('Real-Result', 'children'),
