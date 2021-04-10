@@ -901,12 +901,13 @@ def show_scatter_to_plot(embedding_dataset, cutting_dataset, process_label, x_va
     idx = find_scatter_index(embedding_dataset, x_value, y_value)
 
     if idx is None:
-        return
+        return None
 
     finded_process = process_label[idx]
     col_name = "Process " + str(finded_process)
-    index_df = pd.DataFrame(cutting_dataset[idx], columns=[col_name])
-    ax = index_df.plot()
+    #index_df = pd.DataFrame(cutting_dataset[idx], columns=[col_name])
+    #ax = index_df.plot()
+    ax = px.line(cutting_dataset[idx])
 
     return ax
 
@@ -1284,9 +1285,19 @@ app.layout = html.Div(
                             ),
                             html.Div([
                                 html.Div(id='Cluster_Plot', children=[], className="scroll_container_plot", ),
-                                html.Div(id="Cluster_Graph", children=[], className="scroll_container_graph"),
+                                html.Div(id='Cluster_Graph', children=[
+                                dcc.Graph(
+                                    id='cluster-result')
+                                ], className="scroll_container_graph", ),
+                                html.Div(id='Cluster_Hover', children=[], className="scroll_container_plot", ),
+
                                 html.Div(id='K_means_Cluster_Plot', children=[], className="scroll_container_plot", ),
-                                html.Div(id="K_means_Cluster_Graph", children=[], className="scroll_container_graph"),
+                                html.Div(id='K_means_Cluster_Graph', children=[
+                                    dcc.Graph(
+                                    id='K-Means-result')
+                                ], className="scroll_container_graph", ),
+                                html.Div(id='K_means_Cluster_Hover', children=[], className="scroll_container_plot", ),
+
                                 html.Div(id="Outlier_Plot", children=[], className="scroll_container_outlier")
                             ],
                                 id="clustering_right-column",
@@ -1640,8 +1651,12 @@ def update_hist(n_invervals):
 
             Output('Cluster_Plot', 'style'),
             Output('Cluster_Graph', 'style'),
-            Output('K_means_Cluster_Plot', 'style'),
+            Output('Cluster_Hover', 'style'),
+
+              Output('K_means_Cluster_Plot', 'style'),
             Output('K_means_Cluster_Graph', 'style'),
+              Output('K_means_Cluster_Hover', 'style'),
+
               Output('Outlier_Plot', 'style'),
 
               Input('clustering_radio', 'value'))
@@ -1650,23 +1665,23 @@ def cluster_option(clustering_radio):
         return [html.H4('K-MEANS'), {'display': 'block'},{'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'none'}, {'display': 'none'},{'display': 'block'},
-                {'display': 'block'},{'display': 'none'}]
+                {'display': 'none'}, {'display': 'none'},{'display': 'none'},{'display': 'block'},
+                {'display': 'block'},{'display': 'block'},{'display': 'none'}]
 
     elif clustering_radio == 'DBSCAN':
 
         return [html.H4('DBSCAN'), {'display': 'none'},{'display': 'none'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
-                {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
-                {'display': 'none'},{'display': 'block'}]
+                {'display': 'block'}, {'display': 'block'}, {'display': 'block'},{'display': 'none'},
+                {'display': 'none'},{'display': 'none'},{'display': 'block'}]
 
     elif clustering_radio == 'K-shape':
         return [html.H4('K-SHAPE'), {'display': 'block'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'block'},{'display': 'block'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}]
+                {'display': 'block'},{'display': 'block'}, {'display': 'block'},{'display': 'none'},
+                {'display': 'none'},{'display': 'none'}, {'display': 'none'}]
 
 
 # cluster-result 는 그래프, radio_cluster_num, options 는 라디오 버튼에 동적으로 추가한 options 이고
@@ -1697,16 +1712,14 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
     children_Plot = []
     children_Graph = []
 
-    print("process label: ", process_label)
-
     if 'Clustering-btn' in changed_id:
+
         if clustering_radio == 'K-Means':
             cluster_list,cluster_value = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)
 
             options = []
             for i in range(len(cluster_list)):
                 options.append({'label' : str(cluster_list[i])+' ('+str(cluster_value[i])+'%)', 'value' : str(i)})
-
             """
             for n_cluster in cluster_list:
 
@@ -1754,7 +1767,7 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
             #         figure=fig
             #     )]
             # ))
-            return ["", "", "",options]
+            return ["", None, "",options]
 
         elif clustering_radio == "DBSCAN":
             predict = clsutering_DBSCAN(embedding_data, EPS, MIN_SAMPLES)
@@ -1782,17 +1795,17 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
 
                 children_Graph.append(
                     dcc.Graph(
-                        id='dbscan-result',
+                        id='cluster-result',
                         figure=fig)
                 )
             else:
                 fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
 
                 children_Graph.append(
-                    dcc.Graph(
-                        id='dbscan-result',
-                        figure=fig)
-                )
+                     dcc.Graph(
+                         id='cluster-result',
+                         figure=fig)
+                 )
 
             if process_label != None:
 
@@ -1824,8 +1837,8 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
             n_cluster = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)[0][0]
             predict = clustering_KSHAPE(embedding_data, n_cluster=n_cluster)
 
-            children_Plot = []
             children_Graph = []
+            children_Plot = []
 
             if len(set(predict)) > 1:
 
@@ -1841,11 +1854,10 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
             fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
 
             children_Graph.append(dcc.Graph(
-                id='kshape-reuslt',
-                figure=fig
+                 id='cluster-result',
+                 figure=fig
+             )
             )
-            )
-
             return [children_Plot, children_Graph, "",[]]
         else:
             return []
@@ -1866,11 +1878,12 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
     global centroid_value
 
     if k_means_radio=='':
-        return ["",""]
+        return ["",None]
 
     i = int(k_means_radio)
     children_Plot = []
     children_Graph = []
+
     cluster_list, cluster_value = cal_Silhouette(embedding_data, MAX_CLUSTER_SIZE, 5)
 
     predict = clustering_KMEANS(embedding_data, cluster_list[i], MAX_CLUSTER_SIZE)
@@ -1884,7 +1897,7 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
                     id='clustering-plot_' + str(centroid_idx[j]),
                     style={'display': 'inline-block', "autosize": "false", "width": "33.3333%", "height": "100%"},
                     figure = px.line(dataset_pure_list[centroid_idx[j]],
-                             title="K-MEANS Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
+                    title="K-MEANS Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
                                  round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
                 ))
 
@@ -1892,13 +1905,14 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
         fig.add_trace(go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',marker=dict(color='red'), showlegend=False))
 
         children_Graph.append(
-            dcc.Graph(
-                id='K-Means-result',
-                figure=fig)
+             dcc.Graph(
+                 id='K-Means-result',
+                 figure=fig)
         )
 
         predict = clustering_KMEANS(embedding_data, cluster_list[0], MAX_CLUSTER_SIZE)
         centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
+
     else:
         fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
 
@@ -1937,6 +1951,64 @@ def view_graph(cluster_num,n_clicks):
         ))
         return children
 """
+
+@app.callback(Output('Cluster_Hover', 'children'),
+              Input('cluster-result', 'hoverData'))
+def cluster_hover(hoverData):
+
+    global process_label
+    global embedding_data
+    global dataset_pure_list
+
+    if hoverData != None:
+
+        idx = find_scatter_index(embedding_data, hoverData['points'][0]['x'],
+                                 hoverData['points'][0]['y'])
+
+        if idx is None:
+            return dash.no_update
+
+        children = [
+            dcc.Graph(
+                id='Hover_Process_Plot',
+                figure=px.line(dataset_pure_list[idx],
+                               title="Process : " + str(process_label[idx]) + " ({},{})".format(
+                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)))
+            )
+        ]
+        return children
+    else:
+        children = []
+        return children
+
+@app.callback(Output('K_means_Cluster_Hover', 'children'),
+              Input('K-Means-result', 'hoverData'))
+def k_means_hover(hoverData):
+
+    global process_label
+    global embedding_data
+    global dataset_pure_list
+
+    if hoverData != None:
+
+        idx = find_scatter_index(embedding_data,hoverData['points'][0]['x'],
+                                   hoverData['points'][0]['y'])
+
+        if idx is None:
+            return dash.no_update
+
+        children=[
+            dcc.Graph(
+                id='Hover_Process_Plot',
+                figure=px.line(dataset_pure_list[idx],
+                               title="Process : " + str(process_label[idx]) + " ({},{})".format(
+                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)))
+            )
+        ]
+        return children
+    else:
+        children = []
+        return children
 
 # Main
 if __name__ == "__main__":
