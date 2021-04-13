@@ -102,7 +102,6 @@ dataset_pure = None
 preprocessing_csv = None
 process_label = None
 csv_file_name = None
-split_name = None
 
 autoencoder_hist = None
 dataset_pure_list = None
@@ -547,7 +546,7 @@ def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', I
         execution_time = round(end - start, 3)
 
         result = str(i) + " / " + str(EPOCHS) + " [ " + str(execution_time) + " ms ]" + " - loss : " + str(
-            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4))
+            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4)) +"ㅤ"
 
         print(result)
         autoencoder_hist.append(result)
@@ -1096,9 +1095,8 @@ app.layout = html.Div(
                                                               className="dcc_control")
                                                 ], id='SS-label'),
                                                 html.Button('Slice', id='slice-btn', n_clicks=0, className="dcc_btn"),
-                                                html.A('Download', id='download-link', n_clicks=0, className="dcc_btn"),
-                                                html.Button("Download", id="download-btn"),
-                                                Download(id="download"),
+                                                html.Button("Download", id="prep_download-btn", n_clicks=0, className="dcc_btn"),
+                                                Download(id="preprocessing_download"),
                                                 html.Div(id='output-data-upload'),
                                                 html.Div(id='graph'),
                                                 html.Div([
@@ -1227,7 +1225,8 @@ app.layout = html.Div(
                                 dcc.Input(id='min_dist_input', type='number', className="dcc_control"),
 
                                 html.Button('Embedding', id='embedding-btn', n_clicks=0, className="dcc_btn"),
-
+                                html.Button("Download", id="embedding_download-btn", n_clicks=0, className="dcc_btn"),
+                                Download(id="embedding_download"),
                                 html.Div(id='ae_history_div', children=[
                                     html.Label('Autoencoder is Updating',id='ae_hist'),
                                     dcc.Interval(id='interval_component',interval= 1000,n_intervals=0)
@@ -1321,8 +1320,12 @@ app.layout = html.Div(
 # )
 
 def parse_contents(contents, filename, date):
+    global PATH
+    global df
+
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
+
     try:
         if 'csv' in filename:
             global PATH
@@ -1335,6 +1338,7 @@ def parse_contents(contents, filename, date):
 
         elif 'xls' in filename:
             # Assume that the user uploaded an excel file
+            PATH = io.StringIO(decoded.decode('utf-8'))
             df = pd.read_excel(io.BytesIO(decoded), engine='python', encoding='euc-kr')
     except Exception as e:
         print(e)
@@ -1398,8 +1402,7 @@ def show_graph(n_clicks, VC):
 
 
 # slice 모달 창 띄우기
-@app.callback([Output('modal', "is_open"),
-               Output('download-link', 'href')],
+@app.callback(Output('modal', "is_open"),
               [Input('slice-btn', 'n_clicks'),
                Input('cut_radio', 'value'),
                Input('PCN', 'value'),
@@ -1419,98 +1422,83 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global cutting_dataset
     global cutting_dataset_pure
     global csv_file_name
-    global split_name
-    # global dataset_image
 
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
     if 'slice-btn' in changed_id:
-        split_name = str(csv_file_name).split("'")
 
-        # href = '/dash/urlToDownload?value={}'.format(split_name[1])
-        # href = '/dash/urlToDownload'
-        href = ''
-        print("href: ", href)
+        if chk == 'x':
+            dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc)
+            cutting_dataset = sliding_window(dataset, time_s, shift_s)
+            cutting_dataset_pure = sliding_window(dataset_pure, time_s, shift_s)
 
-        if n_clicks or n_clicks2:
-            # print 는 그냥 값 확인하려고 써놓은 것들입니닷
-            print("is open: ", is_open)
+            dataset_pure_list = []
+            process_label = []
 
-            # is_open 을 false 로 바꿔주면 모달 창이 닫혀요
-            if is_open:
-                is_open = False
-            # is_open 초기값을 false 로 해놨어요!
-            else:
-                # Process 존재 X
-                if chk == 'x':
-                    dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc)
-                    cutting_dataset = sliding_window(dataset, time_s, shift_s)
-                    cutting_dataset_pure = sliding_window(dataset_pure, time_s, shift_s)
+            for i in range(len(cutting_dataset_pure)):
+                dataset_pure_list.append(cutting_dataset_pure[i])
+                process_label.append(i)
 
-                    dataset_pure_list = []
-                    process_label = []
-
-                    for i in range(len(cutting_dataset_pure)):
-                        dataset_pure_list.append(cutting_dataset_pure[i])
-                        process_label.append(i)
-
-                # Process 존재 O
-                else:
-                    dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc, pcn)
-                    dataset_pure_list = []
-                    for i in range(len(dataset_pure)):
-                        dataset_pure_list.append(dataset_pure[i])
-                    if cut_radio == 'Truncation':
-                        cutting_dataset = data_truncation(dataset)
-                        cutting_dataset_pure = data_truncation(dataset_pure)
-                    elif cut_radio == 'Padding':
-                        cutting_dataset = data_padding(dataset)
-                        cutting_dataset_pure = data_padding(dataset_pure)
-                    elif cut_radio == 'DTW':
-                        cutting_dataset = data_dtw(dataset)
-                        cutting_dataset_pure = data_dtw(dataset_pure)
-
-            is_open = not is_open
-
-            return [is_open, href]
-
+        # Process 존재 O
         else:
-            print("else ", is_open)
-            return [is_open, ' ']
+
+            dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc, pcn)
+
+            dataset_pure_list = []
+            for i in range(len(dataset_pure)):
+                dataset_pure_list.append(dataset_pure[i])
+
+            if cut_radio == 'Truncation':
+                cutting_dataset = data_truncation(dataset)
+                cutting_dataset_pure = data_truncation(dataset_pure)
+            elif cut_radio == 'Padding':
+                cutting_dataset = data_padding(dataset)
+                cutting_dataset_pure = data_padding(dataset_pure)
+            elif cut_radio == 'DTW':
+                cutting_dataset = data_dtw(dataset)
+                cutting_dataset_pure = data_dtw(dataset_pure)
+
+        return not is_open
+    elif 'close-md' in changed_id:
+        if is_open:
+            is_open = False
+
+        return is_open
     else:
-        return ['', '']
+        return None
 
-
-# 전처리 파일 다운로드 링크
-#@app.server.route('/dash/urlToDownload')
-#def download_csv():
-#    global preprocessing_csv
-#    global split_name
-
-#    str_io = io.StringIO()
-#    preprocessing_csv.to_csv(str_io)
-
-#    mem = io.BytesIO()
-#    mem.write(str_io.getvalue().encode('utf-8'))
-#    mem.seek(0)
-#    str_io.close()
-
-    # file_name= "Preprocessing" + (str(split_name[1]))
-    # print("file name: ",file_name)
-#    return send_file(mem, as_attachment=True,
-#                     attachment_filename="Preprocessing.csv",
-#                     mimetype='text/csv')
 
 from dash_extensions.snippets import send_data_frame
-@app.callback(Output("download","data"),
-              Input("download-btn","n_clicks"))
-def func(n_clicks):
+@app.callback(Output("preprocessing_download","data"),
+              Input("prep_download-btn","n_clicks"))
+def preprocessing_download_func(n_clicks):
     global preprocessing_csv
-    if preprocessing_csv is None:
-        return
+
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+
+    if "prep_download-btn" in changed_id:
+        if preprocessing_csv is None:
+            return
+        else:
+            return send_data_frame(preprocessing_csv.to_csv,'Preprocess.csv')
     else:
-        return send_data_frame(preprocessing_csv.to_csv,'Preprocess.csv')
+        pass
+
+@app.callback(Output("embedding_download","data"),
+              Input("embedding_download-btn","n_clicks"))
+def preprocessing_download_func(n_clicks):
+    global embedding_csv
+
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+
+    if "embedding_download-btn" in changed_id:
+        if embedding_csv is None:
+            return
+        else:
+            return send_data_frame(embedding_csv.to_csv,'Embedding.csv')
+    else:
+        pass
 
 
 @app.callback([Output('cut_radio', 'style'),
@@ -1602,6 +1590,7 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, t
     global cutting_dataset
     global embedding_data
     global autoencoder_hist
+    global embedding_csv
 
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
@@ -1618,6 +1607,20 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, t
 
         elif embedding_radio == 'UMAP':
             embedding_data = embedding_UMAP(cutting_dataset, n_neighbors, min_dist)
+
+        embedding_x = []
+        embedding_y = []
+        embedding_csv = pd.DataFrame()
+
+        for data in embedding_data:
+            embedding_x.append(data[0])
+            embedding_y.append(data[1])
+
+        if process_label != None:
+            embedding_csv['Process'] = process_label
+
+        embedding_csv['X'] = embedding_x
+        embedding_csv['Y'] = embedding_y
 
         children = [
             dcc.Graph(
