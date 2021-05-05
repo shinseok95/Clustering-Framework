@@ -79,7 +79,6 @@ import pandas as pd
 from dash.dependencies import Input, Output, State, ClientsideFunction
 import dash_core_components as dcc
 import dash_html_components as html
-
 # Multi-dropdown options
 from controls import COUNTIES, WELL_STATUSES, WELL_TYPES, WELL_COLORS
 
@@ -94,6 +93,9 @@ np.set_printoptions(threshold=np.inf)  # ...없이 출력하기
 
 PATH = None
 df = None
+prev_path = None
+pure_csv = None
+change_cutting_method = 0
 
 dataset = None
 embedding_data = None
@@ -130,11 +132,43 @@ column : 데이터를 나타내는 칼럼명
 
 
 def align_timeseries_dataset(path, value_col, process_col=None):
+    global prev_path
+    global pure_csv
+    global PATH
+    global change_cutting_method
+
     if path == None or value_col == None:
         return
 
-    input_csv = pd.read_csv(path, engine='python', encoding='euc-kr')
-    input_csv = input_csv.astype({value_col: 'float32'})
+    print("prev path : ", prev_path)
+    print("global path : ",PATH)
+
+    try:
+        if pure_csv is None:
+            print("pure_csv is None")
+            input_csv = pd.read_csv(path, engine='python', encoding='euc-kr')
+            input_csv = input_csv.astype({value_col: 'float32'})
+            pure_csv = input_csv
+
+        elif prev_path is None:
+            print("if 문 2")
+            input_csv = pure_csv
+
+        elif change_cutting_method == 1 and PATH != prev_path:
+            print("PATH != prev_path")
+            input_csv = pd.read_csv(path, engine='python', encoding='euc-kr')
+            input_csv = input_csv.astype({value_col: 'float32'})
+            pure_csv = input_csv
+
+        else:
+            print("Else")
+            input_csv = pure_csv
+
+    except Exception as e:
+        print(e)
+
+    #input_csv = pd.read_csv(path, engine='python', encoding='euc-kr')
+    #input_csv = input_csv.astype({value_col: 'float32'})
 
     # 결측치 제거
     input_csv = input_csv.dropna(subset=[value_col])
@@ -546,10 +580,11 @@ def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', I
         execution_time = round(end - start, 3)
 
         result = str(i) + " / " + str(EPOCHS) + " [ " + str(execution_time) + " ms ]" + " - loss : " + str(
-            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4)) +"ㅤ"
+            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4))
 
         print(result)
         autoencoder_hist.append(result)
+        autoencoder_hist.append(html.Br())
 
     autoencoder.summary()
     # hist = autoencoder.fit(train, train, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(test, test),
@@ -994,39 +1029,33 @@ app.layout = html.Div(
             [
                 html.Div(
                     [
-                        html.Img(
-                            src=app.get_asset_url("stone.png"),
-                            id="plotly-image",
-                            style={
-                                "height": "60px",
-                                "width": "auto",
-                                "margin-bottom": "25px",
-                            },
-                        )
-                    ],
-                    className="one-third column",
-                ),
-                html.Div(
-                    [
                         html.Div(
                             [
-                                html.H3(
-                                    "돌멩이들",
-                                    style={"margin-bottom": "0px"},
-                                ),
-                                html.H5(
-                                    "짱짱", style={"margin-top": "0px"}
-                                ),
+                                html.H1(
+                                    "CLUSTERING FRAMEWORK",
+                                )
                             ]
                         )
                     ],
-                    className="one-half column",
+                    className="title",
                     id="title",
                 ),
+                html.Div(
+                    [
+                        html.Img(
+                            src=app.get_asset_url("kw.jpg"),
+                            id="plotly-image",
+                            width='90px',
+                            height='30px',
+
+                        )
+                    ],
+                    className="logo",
+                ),
+
             ],
             id="header",
             className="row flex-display",
-            style={"margin-bottom": "25px"},
         ),
         dcc.Tabs(
             id="app-tabs",
@@ -1042,8 +1071,6 @@ app.layout = html.Div(
                     children=[
                         html.Div(
                             [
-                                dbc.Row([
-                                    dbc.Col(
                                         html.Div(
                                             [
                                                 dcc.Upload(
@@ -1053,7 +1080,8 @@ app.layout = html.Div(
                                                         html.A('Select Files')
                                                     ]),
                                                     style={
-                                                        'lineHeight': '60px',
+                                                        "height": "150px",
+                                                        'lineHeight': '130px',
                                                         'borderWidth': '1px',
                                                         'borderStyle': 'dashed',
                                                         'borderRadius': '5px',
@@ -1062,40 +1090,63 @@ app.layout = html.Div(
                                                     # Allow multiple files to be uploaded
                                                     multiple=True, className="control_label"
                                                 ),
-                                                html.Label('INPUT Value Column Name', className="dcc_control"),
-                                                dcc.Input(id='VC', type='text', value='Value', className="dcc_control"),
-                                                html.Button('Show Graph', id='graph-btn', n_clicks=0,
-                                                            className="dcc_btn"),
-                                                html.Label('Have Process?', className="dcc_control"),
-                                                dcc.RadioItems(id='chk-process', options=[{'label': 'O', 'value': 'o'},
-                                                                                          {'label': 'X',
-                                                                                           'value': 'x'}]),
-                                                html.Label([
-                                                    "INPUT Process Column Name",
-                                                    dcc.Input(id='PCN', className="dcc_control")
-                                                ], id='PCN-label'),
-                                                html.Label([
-                                                    "Cutting method",
-                                                    dcc.Dropdown(
-                                                        id='cut_radio',
-                                                        options=[{'label': i, 'value': i} for i in
-                                                                 ['Truncation', 'Padding', 'DTW']],
-                                                        value='', className="dcc_control"
-                                                    )
-                                                ], id='CTM-label'),
 
-                                                html.Label([
+                                                html.Div(
+                                                    children=[
+                                                        html.Label('Value Column', className="dcc_control_label"),
+                                                        dcc.Input(id='VC', type='text', value='Value',
+                                                                  className="dcc_control1"),
+                                                        html.Button('Show Graph', id='graph-btn', n_clicks=0,
+                                                                    className="dcc_btn1")],className='label_tm'),
+                                                html.Div(
+                                                    className='empty'
+                                                ),
+                                                html.Div(
+                                                    children=[html.Div(html.Label('Have Process?', className="dcc_control_l2"),className='inline'),
+                                                              html.Div(
+                                                            dcc.RadioItems(id='chk-process',
+                                                                           options=[{'label': ' O ', 'value': 'o'},{'label': ' X ',
+                                                                                           'value': 'x'}],value='o',labelClassName='radio'),className='inline',),]
+                                                    ,className='label_bm'
+                                                ),
+
+
+
+                                                html.Div(
+                                                    children=[html.Div(children=[html.Label([
+                                                    "Process Column",
+                                                    dcc.Input(id='PCN', className="dcc_control2")
+                                                    ], id='PCN-label',className='dcc_input_p'),
+                                                        html.Label([
+                                                            "Cutting method",
+                                                            dcc.Dropdown(
+                                                                id='cut_radio',
+                                                                options=[{'label': i, 'value': i} for i in
+                                                                         ['Truncation', 'Padding', 'DTW']],
+                                                                value='', className="dcc_control3"
+                                                        )
+                                                        ], id='CTM-label',className='dcc_input_p'),],className='inline_flex'),
+
+                                                    html.Div(children=[html.Label([
                                                     "TIME SLICE",
                                                     dcc.Input(id='TS', type='number', value=172,
-                                                              className="dcc_control")
-                                                ], id='TS-label'),
+                                                              className="dcc_control2")
+                                                ], id='TS-label',className='dcc_input_p'),
                                                 html.Label([
                                                     "SHIFT SIZE",
                                                     dcc.Input(id='SS', type='number', value=172,
-                                                              className="dcc_control")
-                                                ], id='SS-label'),
-                                                html.Button('Slice', id='slice-btn', n_clicks=0, className="dcc_btn"),
-                                                html.Button("Download", id="prep_download-btn", n_clicks=0, className="dcc_btn"),
+                                                              className="dcc_control2")
+                                                ], id='SS-label',className='dcc_input_p'),],className='inline_flex'),
+
+                                                html.Button('Slice', id='slice-btn', n_clicks=0, className="dcc_btn2")],className='flex1'),
+                                                html.Div(className='empty2'),
+                                                html.Div(
+                                                    children=[
+                                                        html.Div(className='empty_inline'),
+                                                        html.Button("Download", id="prep_download-btn", n_clicks=0, className="dcc_btn3"),
+                                                    ]
+                                                ),
+
                                                 Download(id="preprocessing_download"),
                                                 html.Div(id='output-data-upload'),
                                                 html.Div(id='graph'),
@@ -1119,11 +1170,9 @@ app.layout = html.Div(
                                                     )
                                                 ]),
                                             ],
-                                            className="pretty_container_side",
-                                            id="cross-filter-options",
-                                        ),width=4),
+                                            className="pretty_container_side1 four columns"
+                                        ),
 
-                                    dbc.Col([
                                         html.Div([
                                             html.Div(
                                                 id="dataTableContainer",
@@ -1134,45 +1183,10 @@ app.layout = html.Div(
                                                 className="pretty_container_preprocessing_graph",
                                             )
                                         ], id="preprocessing_right-column",
-                                            className="eight_columns2",
+                                            className="eight columns",
                                         ),
-                                    ],width=8
-                                        ##
-                                        # dbc.Row(
-                                        #    dbc.Col(
-                                        #        html.Div(
-                                        #            id="dataTableContainer",
-                                        #            className="pretty_container_preprocessing_df"
-                                        #        )
-                                        #    )
-                                        # ),
-                                        # dbc.Row(
-                                        #    dbc.Col(html.Div(
-                                        #        id="GraphContainer",
-                                        #        className="pretty_container_preprocessing_graph",
-                                        #    ))
-                                        # )
-                                        ##
-
-                                    )], no_gutters=True,
-                                    #className="no-gutter"
-                                )
-                                # html.Div(
-                                #    [
-                                # html.Div(
-                                #    id="dataTableContainer",
-                                #    className="pretty_container_preprocessing_df",
-                                # ),
-                                # html.Div(
-                                #    id="GraphContainer",
-                                #    className="pretty_container_preprocessing_graph",
-                                # ),
-                                #   ],
-                                # id="preprocessing_right-column",
-                                # className="eight columns",
-                                # ),
                             ],
-                            # className="row flex-display",
+                            className="column flex-display"
                         ),
                     ]),
                 dcc.Tab(
@@ -1191,48 +1205,74 @@ app.layout = html.Div(
                                         options=[{'label': i, 'value': i} for i in ['Autoencoder', 'PCA', 'UMAP']],
                                         value='Autoencoder', className="dcc_control"
                                     )
-                                ]),
-                                html.Div(html.H4('Autoencoder'), id='Autoencoder_label', className="dcc_control"),
+                                ],className='section-banner'),
+                                html.Div(html.H4('Autoencoder'), id='Autoencoder_label', className="dcc_control_h4"),
 
                                 html.Div(html.Label('Learning_Rate'), id='Learning_Rate_label'),
                                 dcc.Input(id='Learning_Rate_input', type='number'),
 
-                                html.Div(html.Label('Batch_Size'), id='Batch_Size_label', className="dcc_control"),
+                                html.Div(html.Label('Batch_Size'), id='Batch_Size_label', className="dcc_control_label"),
                                 dcc.Input(id='Batch_Size_input', type='number', className="dcc_control"),
 
-                                html.Div(html.Label('Epoch'), id='Epoch_label', className="dcc_control"),
-                                dcc.Input(id='Epoch_input', type='number', className="dcc_control"),
+                                html.Div(html.Label('Epoch'), id='Epoch_label', className="dcc_control_label"),
+                                dcc.Input(id='Epoch_input', type='number', className="dcc_control_label"),
 
                                 html.Div(html.Label('Test Data Size'), id='Test_Data_Size_label',
-                                         className="dcc_control"),
-                                dcc.Input(id='Test_Data_Size_input', type='number', className="dcc_control"),
-
-                                html.Div(html.Label('Imaging Algorithm'), id='Imaging_Algorithm_label',
-                                         className="dcc_control"),
+                                         className="dcc_control_label"),
+                                dcc.Input(id='Test_Data_Size_input', type='number', className="dcc_control_label"),
+                                html.Div(id='autoencoder_options',
+                                    children=[
+                                        html.Div(children=[html.Div(html.Label(" Imaging\nAlgorithm"), id='Imaging_Algorithm_label',
+                                         className="dcc_control_image"),
+                                        html.Div(children=[
                                 dcc.RadioItems(id='IMAGING_FLAG',
-                                               options=[{'label': 'RP', 'value': '1'}, {'label': 'GAF', 'value': '2'}]),
+                                               options=[{'label': 'RP', 'value': '1'}, {'label': 'GAF', 'value': '2'}],className='radio_image'),]
+                                            ,className='inline_image'),],className='inline_flex_image'),
+                                        html.Div(children=[html.Div(html.Label("IMAGE\n  SIZE"), id='Imaging_Size_label',
+                                         className="dcc_control_image"),
 
-                                html.Div(html.Label('IMAGING_FLAG'), id='Imaging_Size_label',
-                                         className="dcc_control"),
+                                html.Div(
+                                    children=[
+
                                 dcc.RadioItems(id='IMAGING_SIZE_FLAG', options=[{'label': 'small', 'value': '1'},
                                                                                 {'label': 'middle', 'value': '2'},
-                                                                                {'label': 'large', 'value': '3'}]),
+                                                                                {'label': 'large', 'value': '3'}],className='radio_image2'),]
+                                    ,className='inline_image2'),],className='inline_flex_image'),
 
-                                html.Div(html.Label('n_neighbors'), id='n_neighbors_label'),
-                                dcc.Input(id='n_neighbors_input', type='number'),
+                                ]
+                                    ,className='flex-display-image'),
 
-                                html.Div(html.Label('min_dist'), id='min_dist_label', className="dcc_control"),
-                                dcc.Input(id='min_dist_input', type='number', className="dcc_control"),
 
-                                html.Button('Embedding', id='embedding-btn', n_clicks=0, className="dcc_btn"),
-                                html.Button("Download", id="embedding_download-btn", n_clicks=0, className="dcc_btn"),
+                                html.Div(
+                                    id='umap_op',
+                                    children=[
+                                        html.Div(
+                                            children=[
+                                                html.Div(html.Label('n_neighbors'), id='n_neighbors_label', className="dcc_control_umap1"),
+                                                dcc.Input(id='n_neighbors_input', type='number', className="dcc_control_umap2"),
+                                            ],className='inline_flex_umap'),
+                                        html.Div(
+                                            children=[
+                                                html.Div(html.Label('min_dist'), id='min_dist_label', className="dcc_control_umap1"),
+                                                dcc.Input(id='min_dist_input', type='number', className="dcc_control_umap2"),
+                                            ],className='inline_flex_umap'),
+
+                                    ],className='umap_options'),
+
+                                html.Div(
+                                    children=[
+                                        html.Button('Embedding', id='embedding-btn', n_clicks=0, className="dcc_btn4"),
+                                        html.Button("Download", id="embedding_download-btn", n_clicks=0, className="dcc_btn4"),
+                                    ],className='flex-display'),
+
+
                                 Download(id="embedding_download"),
                                 html.Div(id='ae_history_div', children=[
                                     html.Label('Autoencoder is Updating',id='ae_hist'),
                                     dcc.Interval(id='interval_component',interval= 1000,n_intervals=0)
                                 ], className="scroll_container_hist"),
 
-                            ], className="pretty_container_side four columns",
+                            ], className="pretty_container_side1 four columns",
                             ),
 
                             html.Div([
@@ -1242,7 +1282,7 @@ app.layout = html.Div(
                                 className="eight columns",
                             ),
                         ]
-                            , className="row flex-display"
+                            , className="column flex-display"
                         )]),
                 dcc.Tab(
                     id="Clustering-tab",
@@ -1258,44 +1298,66 @@ app.layout = html.Div(
                                     dcc.Dropdown(
                                         id='clustering_radio',
                                         options=[{'label': i, 'value': i} for i in ['K-Means', 'DBSCAN', 'K-shape']],
-                                        value='K-Means'
+                                        value='K-Means',className="dcc_control"
                                     )
-                                ]),
-                                html.Div(html.H4('K-Means'), id='K-Means_label', className="dcc_control"),
+                                ],className='section-banner'),
+                                html.Div(html.H4('K-Means'), id='K-Means_label', className="dcc_control_label"),
+                                html.Div(
+                                    children=[
+                                        html.Div(id='k-means',
+                                            children=[
+                                                html.Div(html.Label('MAX_CLUSTER_SIZE'), id='MAX_CLUSTER_SIZE_label',className='cluster_label',),
+                                                dcc.Input(id='MAX_CLUSTER_SIZE_input', type='number',className='cluster_max'),
+                                            ],className='cluster_flex_inline',
+                                        ),
 
-                                html.Div(html.Label('MAX_CLUSTER_SIZE'), id='MAX_CLUSTER_SIZE_label'),
-                                dcc.Input(id='MAX_CLUSTER_SIZE_input', type='number'),
+                                html.Div(id='dbscan',
+                                    children=[
+                                        html.Div(
+                                            children=[
+                                                html.Div(html.Label('EPS'), id='EPS_label', className="dcc_control_dbscan"),
+                                                dcc.Input(id='EPS_input', type='number', className="dcc_control_dbscan"),
 
-                                html.Div(html.Label('EPS'), id='EPS_label', className="dcc_control"),
-                                dcc.Input(id='EPS_input', type='number', className="dcc_control"),
+                                            ],className='dcc_control_cluster'),
+                                        html.Div(
+                                            children=[
+                                                html.Div(html.Label('MIN_SAMPLES'), id='MIN_SAMPLES_label', className="dcc_control_dbscan"),
+                                                dcc.Input(id='MIN_SAMPLES_input', type='number', className="dcc_control_dbscan"),
+                                            ],className='dcc_control_cluster'),
 
-                                html.Div(html.Label('MIN_SAMPLES'), id='MIN_SAMPLES_label', className="dcc_control"),
-                                dcc.Input(id='MIN_SAMPLES_input', type='number', className="dcc_control"),
+                                    ],className='cluster_flex_inline2'),
 
-                                html.Button('Clustering', id='Clustering-btn', n_clicks=0, className="dcc_btn"),
-                                html.Div(html.Label('Silhouette Coefficient'), id='Silhouette_Coefficient_label'),
-                                dcc.Dropdown(
-                                        id='k-means_clustering_radio',
-                                        options=[],
-                                        value=''
-                                ),
-                            ], className="pretty_container_side four columns",
+                                html.Button('Clustering', id='Clustering-btn', n_clicks=0, className="cluster_btn"),
+                                    ],className='cluster_flex'),
+                                html.Div(children=[
+                                    html.Div(html.Label('Silhouette Coefficient'), id='Silhouette_Coefficient_label',className='silhouette_label'),
+                                    html.Div(dcc.Dropdown(
+                                            id='k-means_clustering_radio',
+                                            options=[],
+                                            value=''
+                                    ),className='silhouette_radio'),],className='silhouette'),
+
+                            ], className="pretty_container_side1 four columns",
 
                             ),
                             html.Div([
                                 html.Div(id='Cluster_Plot', children=[], className="scroll_container_plot", ),
-                                html.Div(id='Cluster_Graph', children=[
-                                dcc.Graph(
-                                    id='cluster-result')
-                                ], className="scroll_container_graph", ),
-                                html.Div(id='Cluster_Hover', children=[], className="scroll_container_plot", ),
+                                html.Div(id='Cluster_Graph&Hover',style={'display': 'flex'},
+                                         children=[html.Div(className='half_container', id='Cluster_Graph', children=[
+                                             dcc.Graph(
+                                                 id='cluster-result', )
+                                         ]),
+                                                   html.Div(className='half_container', id='Cluster_Hover',
+                                                            children=[])], className="scroll_container_graph"),
 
                                 html.Div(id='K_means_Cluster_Plot', children=[], className="scroll_container_plot", ),
-                                html.Div(id='K_means_Cluster_Graph', children=[
-                                    dcc.Graph(
-                                    id='K-Means-result')
-                                ], className="scroll_container_graph", ),
-                                html.Div(id='K_means_Cluster_Hover', children=[], className="scroll_container_plot", ),
+                                html.Div(id='K_means_Cluster_Graph&Hover',style={'display': 'flex'}, children=[
+                                    html.Div(className='half_container', id='K_means_Cluster_Graph', children=[
+                                        dcc.Graph(
+                                            id='K-Means-result')
+                                    ]),
+                                    html.Div(className='half_container', id='K_means_Cluster_Hover', children=[])],className="scroll_container_graph"
+                                        ),
 
                                 html.Div(id="Outlier_Plot", children=[], className="scroll_container_outlier")
                             ],
@@ -1303,7 +1365,7 @@ app.layout = html.Div(
                                 className="eight columns",
                             ),
                         ],
-                            className="row flex-display")
+                            className="column flex-display")
                     ])]
         )
     ],
@@ -1322,6 +1384,8 @@ app.layout = html.Div(
 def parse_contents(contents, filename, date):
     global PATH
     global df
+    global prev_path
+    global change_cutting_method
 
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
@@ -1329,15 +1393,21 @@ def parse_contents(contents, filename, date):
     try:
         if 'csv' in filename:
             global PATH
+            global prev_path
             global df
-            # Assume that the user uploaded a CSV file
+            global change_cutting_method
 
+            # Assume that the user uploaded a CSV file
+            prev_path = PATH
+            change_cutting_method = 0
             PATH = io.StringIO(decoded.decode('utf-8'))
             df = pd.read_csv(
                 io.StringIO(decoded.decode('utf-8')))
 
         elif 'xls' in filename:
             # Assume that the user uploaded an excel file
+            prev_path = PATH
+            change_cutting_method = 0
             PATH = io.StringIO(decoded.decode('utf-8'))
             df = pd.read_excel(io.BytesIO(decoded), engine='python', encoding='euc-kr')
     except Exception as e:
@@ -1422,11 +1492,13 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global cutting_dataset
     global cutting_dataset_pure
     global csv_file_name
+    global change_cutting_method
 
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
     if 'slice-btn' in changed_id:
+        change_cutting_method += 1
 
         if chk == 'x':
             dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc)
@@ -1442,8 +1514,10 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
 
         # Process 존재 O
         else:
-
-            dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc, pcn)
+            try:
+                dataset, preprocessing_csv, process_label, dataset_pure = align_timeseries_dataset(PATH, vc, pcn)
+            except:
+                print("시계열 데이터 cutting ERROR")
 
             dataset_pure_list = []
             for i in range(len(dataset_pure)):
@@ -1452,12 +1526,17 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
             if cut_radio == 'Truncation':
                 cutting_dataset = data_truncation(dataset)
                 cutting_dataset_pure = data_truncation(dataset_pure)
+                print("Truncation: ", cutting_dataset_pure.shape)
+
             elif cut_radio == 'Padding':
                 cutting_dataset = data_padding(dataset)
                 cutting_dataset_pure = data_padding(dataset_pure)
+                print("Padding: ", cutting_dataset_pure.shape)
+
             elif cut_radio == 'DTW':
                 cutting_dataset = data_dtw(dataset)
                 cutting_dataset_pure = data_dtw(dataset_pure)
+                print("DTW: ", cutting_dataset_pure.shape)
 
         return not is_open
     elif 'close-md' in changed_id:
@@ -1521,6 +1600,7 @@ def preprocessing(value):
 
 
 @app.callback([Output('Autoencoder_label', 'children'),
+               Output('autoencoder_options','style'),
                Output('Learning_Rate_input', 'style'),
                Output('Batch_Size_input', 'style'),
                Output('Epoch_input', 'style'),
@@ -1538,35 +1618,36 @@ def preprocessing(value):
                Output('Imaging_Algorithm_label', 'style'),
                Output('Imaging_Size_label', 'style'),
 
+               Output('umap_op','style'),
                Output('n_neighbors_label', 'style'),
                Output('min_dist_label', 'style')],
               Input('embedding_radio', 'value'))
 def show_vector_parameter(embedding_radio):
     if embedding_radio == "Autoencoder":
-        return [html.H4('Autoencoder'), {'display': 'block'},
+        return [html.H4('Autoencoder'), {'display': 'block'},{'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
-                {'display': 'block'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'block'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "PCA":
-        return [html.H4('PCA'), {'display': 'none'},
+        return [html.H4('PCA'), {'display': 'none'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "UMAP":
-        return [html.H4('UMAP'), {'display': 'none'},
+        return [html.H4('UMAP'), {'display': 'none'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
                 {'display': 'block'},{'display': 'none'}, {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, ]
+                {'display': 'none'},  {'display': 'block'},{'display': 'block'}, {'display': 'block'}, ]
 
     else:
         return ['', '', '', '', '', '', '', '', '']
@@ -1641,9 +1722,10 @@ def update_hist(n_invervals):
 
 
 @app.callback(Output('K-Means_label', 'children'),
+              Output('k-means','style'),
               Output('MAX_CLUSTER_SIZE_input', 'style'),
               Output('k-means_clustering_radio', 'style'),
-
+              Output('dbscan','style'),
               Output('EPS_input', 'style'),
               Output('MIN_SAMPLES_input', 'style'),
 
@@ -1653,38 +1735,36 @@ def update_hist(n_invervals):
               Output('Silhouette_Coefficient_label', 'style'),
 
             Output('Cluster_Plot', 'style'),
-            Output('Cluster_Graph', 'style'),
-            Output('Cluster_Hover', 'style'),
+            Output('Cluster_Graph&Hover', 'style'),
 
               Output('K_means_Cluster_Plot', 'style'),
-            Output('K_means_Cluster_Graph', 'style'),
-              Output('K_means_Cluster_Hover', 'style'),
+            Output('K_means_Cluster_Graph&Hover', 'style'),
 
               Output('Outlier_Plot', 'style'),
 
               Input('clustering_radio', 'value'))
 def cluster_option(clustering_radio):
     if clustering_radio == 'K-Means':
-        return [html.H4('K-MEANS'), {'display': 'block'},{'display': 'block'},
+        return [html.H4('K-MEANS'), {'display': 'block'},{'display': 'block'},{'display': 'block'},
+                {'display': 'none'}, {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
-                {'display': 'none'}, {'display': 'none'},{'display': 'none'},{'display': 'block'},
-                {'display': 'block'},{'display': 'block'},{'display': 'none'}]
+                {'display': 'none'}, {'display': 'none'},{'display': 'block'},
+                {'display': 'block'},{'display': 'none'}]
 
     elif clustering_radio == 'DBSCAN':
 
-        return [html.H4('DBSCAN'), {'display': 'none'},{'display': 'none'},
+        return [html.H4('DBSCAN'), {'display': 'none'}, {'display': 'none'},{'display': 'none'},
+                {'display': 'block'}, {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
-                {'display': 'block'}, {'display': 'block'}, {'display': 'block'},{'display': 'none'},
-                {'display': 'none'},{'display': 'none'},{'display': 'block'}]
+                {'display': 'none'},{'display': 'block'}]
 
     elif clustering_radio == 'K-shape':
-        return [html.H4('K-SHAPE'), {'display': 'block'},{'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
+        return [html.H4('K-SHAPE'), {'display': 'block'}, {'display': 'block'},{'display': 'none'},
+                {'display': 'none'},{'display': 'none'}, {'display': 'none'}, {'display': 'block'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'block'},{'display': 'block'}, {'display': 'block'},{'display': 'none'},
-                {'display': 'none'},{'display': 'none'}, {'display': 'none'}]
+                {'display': 'block'},{'display': 'block'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'}]
 
 
 # cluster-result 는 그래프, radio_cluster_num, options 는 라디오 버튼에 동적으로 추가한 options 이고
@@ -1791,7 +1871,7 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                                    "height": "100%"},
                             figure=px.line(dataset_pure_list[centroid_idx[j]], title="DBSCAN Process : " + str(process_label[centroid_idx[j]])+"( {}, {} )".format(round(centroid_value[j][0],2),round(centroid_value[j][1],2)) )
                         ))
-                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
                 fig.add_trace(
                 go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',
                            marker=dict(color='red'), showlegend=False))
@@ -1802,7 +1882,7 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                         figure=fig)
                 )
             else:
-                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
 
                 children_Graph.append(
                      dcc.Graph(
@@ -1854,7 +1934,7 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                                                round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
                         ))
 
-            fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+            fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
 
             children_Graph.append(dcc.Graph(
                  id='cluster-result',
@@ -1904,7 +1984,7 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
                                  round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
                 ))
 
-        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
         fig.add_trace(go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',marker=dict(color='red'), showlegend=False))
 
         children_Graph.append(
@@ -1917,7 +1997,7 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
         centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
 
     else:
-        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], width=800, height=400, color=predict)
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict)
 
         children_Graph.append(
             dcc.Graph(
