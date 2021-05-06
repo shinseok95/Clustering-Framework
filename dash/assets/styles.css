@@ -59,8 +59,14 @@ body {
 .eight_columns2{
     width: 82%
 }
+
+.my-table {
+  background-color: #161a28;
+  color: #ffffff;
+}
+
 .pretty_container_preprocessing_df {
-  color : #000000 !important;
+  color : #fff !important;
   height: 300px;
   width: 96.5%;
   border-radius: 5px;
@@ -149,17 +155,22 @@ body {
 
 }
 .scroll_container_hist {
-  height: 450px;
+  height: 200px;
   width: 96%;
   overflow-y: scroll;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 25px;
+  margin: 25px 25px 0px 25px;
   padding: 15px;
 
 }
 
-
+.auto_con{
+  display:inline-block;
+  width:30%
+  padding:5px;
+  margin:2px;
+}
 
 .half_container{
   height:90%;
@@ -246,6 +257,10 @@ body {
   margin: 5px;
   width: 100%;
 }
+.dcc_control_dbscan2 {
+  margin: 5px;
+  width: 100%;
+}
 .dcc_control_cluster {
   color: #f3f5f4 !important;
   margin: 5px;
@@ -272,8 +287,8 @@ body {
 .flex-display-image {
   padding: 2px 0px 2px 10px;
   display: flex;
-    background-color: #1e2130;
-  margin: 20px 0px 20px 0px;
+  background-color: #1e2130;
+  margin: 20px 0px 25px 0px;
   border-radius:10px;
   border : 0.5px solid #b8b9ba;
 }
@@ -303,6 +318,14 @@ padding:2px;
 .radio{
   display :inline-block;
   margin-left: 10px;
+}
+.dcc_auto{
+  width:90%;
+  margin:5px 1px 11px 5px;
+}
+.dcc_auto2{
+  width:90%;
+  margin:2px 1px 6px 1px;
 }
 .dcc_control_label{
   color: #f3f5f4 !important;

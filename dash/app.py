@@ -1077,7 +1077,7 @@ app.layout = html.Div(
                                                     id='upload-data',
                                                     children=html.Div([
                                                         'Drag and Drop or ',
-                                                        html.A('Select Files')
+                                                        html.A('Select Files',className='file')
                                                     ]),
                                                     style={
                                                         "height": "150px",
@@ -1153,8 +1153,8 @@ app.layout = html.Div(
                                                 html.Div([
                                                     dbc.Modal(
                                                         [
-                                                            dbc.ModalHeader(html.H2("Alert")),
-                                                            dbc.ModalBody(html.H4("Cutting Success")),
+                                                            dbc.ModalHeader(),
+                                                            dbc.ModalBody(html.H2("Cutting Success")),
                                                             dbc.ModalFooter(
                                                                 dbc.Button("Close", id="close-md", className="ml-auto")
                                                             ),
@@ -1207,19 +1207,19 @@ app.layout = html.Div(
                                     )
                                 ],className='section-banner'),
                                 html.Div(html.H4('Autoencoder'), id='Autoencoder_label', className="dcc_control_h4"),
+                                html.Div(
+                                    children=[html.Div(children=[html.Div(html.Label('Learning_Rate'), id='Learning_Rate_label', className="dcc_auto"),
+                                dcc.Input(id='Learning_Rate_input', type='number', className="dcc_auto2"),],className='auto_con'),
+                                html.Div(children=[html.Div(html.Label('Batch_Size'), id='Batch_Size_label', className="dcc_auto"),
+                                dcc.Input(id='Batch_Size_input', type='number', className="dcc_auto2"),],className='auto_con'),
+                                html.Div(children=[html.Div(html.Label('Epoch'), id='Epoch_label', className="dcc_auto"),
+                                dcc.Input(id='Epoch_input', type='number', className="dcc_auto2"),],className='auto_con'),],className='flex-display'),
 
-                                html.Div(html.Label('Learning_Rate'), id='Learning_Rate_label'),
-                                dcc.Input(id='Learning_Rate_input', type='number'),
 
-                                html.Div(html.Label('Batch_Size'), id='Batch_Size_label', className="dcc_control_label"),
-                                dcc.Input(id='Batch_Size_input', type='number', className="dcc_control"),
 
-                                html.Div(html.Label('Epoch'), id='Epoch_label', className="dcc_control_label"),
-                                dcc.Input(id='Epoch_input', type='number', className="dcc_control_label"),
-
-                                html.Div(html.Label('Test Data Size'), id='Test_Data_Size_label',
-                                         className="dcc_control_label"),
-                                dcc.Input(id='Test_Data_Size_input', type='number', className="dcc_control_label"),
+                                # html.Div(html.Label('Test Data Size'), id='Test_Data_Size_label',
+                                #          className="dcc_control_label"),
+                                # dcc.Input(id='Test_Data_Size_input', type='number', className="dcc_control_label"),
                                 html.Div(id='autoencoder_options',
                                     children=[
                                         html.Div(children=[html.Div(html.Label(" Imaging\nAlgorithm"), id='Imaging_Algorithm_label',
@@ -1316,13 +1316,13 @@ app.layout = html.Div(
                                         html.Div(
                                             children=[
                                                 html.Div(html.Label('EPS'), id='EPS_label', className="dcc_control_dbscan"),
-                                                dcc.Input(id='EPS_input', type='number', className="dcc_control_dbscan"),
+                                                dcc.Input(id='EPS_input', type='number', className="dcc_control_dbscan2"),
 
                                             ],className='dcc_control_cluster'),
                                         html.Div(
                                             children=[
                                                 html.Div(html.Label('MIN_SAMPLES'), id='MIN_SAMPLES_label', className="dcc_control_dbscan"),
-                                                dcc.Input(id='MIN_SAMPLES_input', type='number', className="dcc_control_dbscan"),
+                                                dcc.Input(id='MIN_SAMPLES_input', type='number', className="dcc_control_dbscan2"),
                                             ],className='dcc_control_cluster'),
 
                                     ],className='cluster_flex_inline2'),
@@ -1420,7 +1420,19 @@ def parse_contents(contents, filename, date):
         html.H5(filename),
         dash_table.DataTable(
             data=df[:5].to_dict('records'),
-            columns=[{'name': i, 'id': i} for i in df.columns]
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_data={
+                'backgroundColor':'#161a28',
+                'color':'white',
+                'font-family': "Open Sans",
+                'text-align': 'center'
+            } ,
+            style_header={
+                'backgroundColor': '#161a28',
+                'color': 'white',
+                'font-family': "Open Sans",
+                'text-align': 'center'
+            }
         )
     ])
 
@@ -1462,8 +1474,20 @@ def show_graph(n_clicks, VC):
         children = [
             dcc.Graph(
                 id='example-graph',
-                style={"width": "100%", "height": "100%"},
-                figure=px.line(df[VC])
+                style={"width": "100%", "height": "100%","color":"white"},
+                figure=px.line(df[VC],color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showline=False, showgrid=False, zeroline=False
+                            ),
+                            "yaxis": dict(
+                                showgrid=False, showline=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
+
             )
         ]
         return children
@@ -1604,7 +1628,7 @@ def preprocessing(value):
                Output('Learning_Rate_input', 'style'),
                Output('Batch_Size_input', 'style'),
                Output('Epoch_input', 'style'),
-               Output('Test_Data_Size_input', 'style'),
+               # Output('Test_Data_Size_input', 'style'),
                Output('IMAGING_FLAG', 'style'),
                Output('IMAGING_SIZE_FLAG', 'style'),
                Output('n_neighbors_input', 'style'),
@@ -1614,7 +1638,7 @@ def preprocessing(value):
                Output('Learning_Rate_label', 'style'),
                Output('Batch_Size_label', 'style'),
                Output('Epoch_label', 'style'),
-               Output('Test_Data_Size_label', 'style'),
+               # Output('Test_Data_Size_label', 'style'),
                Output('Imaging_Algorithm_label', 'style'),
                Output('Imaging_Size_label', 'style'),
 
@@ -1626,27 +1650,27 @@ def show_vector_parameter(embedding_radio):
     if embedding_radio == "Autoencoder":
         return [html.H4('Autoencoder'), {'display': 'block'},{'display': 'block'},
                 {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
-                {'display': 'block'}, {'display': 'block'}, {'display': 'none'},
+                 {'display': 'block'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
-                {'display': 'block'}, {'display': 'block'}, {'display': 'block'},
+                {'display': 'block'}, {'display': 'block'},
                 {'display': 'block'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "PCA":
         return [html.H4('PCA'), {'display': 'none'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'none'}, {'display': 'none'},
                 {'display': 'none'}, {'display': 'none'},{'display': 'none'}, {'display': 'none'},
                 ]
 
     elif embedding_radio == "UMAP":
         return [html.H4('UMAP'), {'display': 'none'},{'display': 'none'},
                 {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'block'},
+                {'display': 'none'}, {'display': 'block'},
                 {'display': 'block'},{'display': 'none'}, {'display': 'none'}, {'display': 'none'},
-                {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+                {'display': 'none'},  {'display': 'none'},
                 {'display': 'none'},  {'display': 'block'},{'display': 'block'}, {'display': 'block'}, ]
 
     else:
@@ -1660,13 +1684,13 @@ def show_vector_parameter(embedding_radio):
               Input('Learning_Rate_input', 'value'),
               Input('Batch_Size_input', 'value'),
               Input('Epoch_input', 'value'),
-              Input('Test_Data_Size_input', 'value'),
+              # Input('Test_Data_Size_input', 'value'),
               Input('IMAGING_FLAG', 'value'),
               Input('IMAGING_SIZE_FLAG', 'value'),
               Input('n_neighbors_input', 'value'),
               Input('min_dist_input', 'value'),
               )
-def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, test_data_size, IMAGING_FLAG,
+def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, IMAGING_FLAG,
                   IMAGING_SIZE_FLAG, n_neighbors, min_dist):
     global cutting_dataset
     global embedding_data
@@ -1681,7 +1705,7 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, t
             autoencoder_hist = []
 
             embedding_data = embedding_AE(cutting_dataset, learning_rate, batch_size, epoch, IMAGING_FLAG,
-                                          IMAGING_SIZE_FLAG, TEST_SIZE=test_data_size)
+                                          IMAGING_SIZE_FLAG, TEST_SIZE=1)
 
         elif embedding_radio == 'PCA':
             embedding_data = embedding_PCA(cutting_dataset)
@@ -1707,7 +1731,18 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, t
             dcc.Graph(
                 id='embedding-result',
                 style={"width": "100%", "height": "100%"},
-                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1])
+                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showline=False, zeroline=False
+                            ),
+                            "yaxis": dict(
+                                showline=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
             )
         ]
         return children
