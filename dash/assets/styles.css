@@ -25,6 +25,29 @@ body {
   padding: 1rem 0 2rem 0 ;
   border-bottom: 1px solid ;
   border-bottom-color:#a2a6ab;
+
+}
+.section-banner2 {
+  color: #f3f5f4;
+  font-size: 1.8rem;
+  text-align: left;
+  padding: 1rem 0 2rem 0 ;
+  border-bottom: 1px solid ;
+  border-bottom-color:#a2a6ab;
+  padding :15px 20px 15px 20px;
+
+}
+.hist{
+  padding : 15px 20px 15px 20px;
+
+}
+.hist2{
+  padding :0px 20px 15px 20px;
+
+}
+.history{
+  background-color: #161a28 !important;
+  border-radius:5px;
 }
 .title{
   float:left;
@@ -83,6 +106,7 @@ body {
   height: fit-content;
   cursor: pointer;
 }
+
 .custom-tab{
   border-top: 0px solid transparent !important;
   background-color: #161a28 !important;

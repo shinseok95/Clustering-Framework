@@ -115,7 +115,8 @@ centroid_idx = None
 centroid_value = None
 
 Kmean = KMeans(n_clusters=5)
-
+pphist=None
+emhist=None
 # Function
 
 """
@@ -634,8 +635,11 @@ _min_dist : 얼마나 점들을 조밀하게 묶을 것인지 (낮을 수록 조
 
 def embedding_UMAP(dataset, _n_neighbors=50, _min_dist=0.1):
     reducer = umap.UMAP(n_components=2, n_neighbors=_n_neighbors, init='random', random_state=0, min_dist=_min_dist)
-    embedding = reducer.fit_transform(dataset)
-    return embedding
+    embedding_2d = reducer.fit_transform(dataset)
+
+    reducer = umap.UMAP(n_components=3, n_neighbors=_n_neighbors, init='random', random_state=0, min_dist=_min_dist)
+    embedding_3d = reducer.fit_transform(dataset)
+    return embedding_2d,embedding_3d
 
 
 # PCA 함수
@@ -645,12 +649,21 @@ n_component : 주성분 분석 개수
 """
 
 
-def embedding_PCA(dataset, n_component=2):
+def embedding_PCA(dataset, n_component=10):
     pca = PCA(n_components=n_component)
     pca.fit(dataset)
-    dataset_pca = pca.transform(dataset)
+    per_var = np.round(pca.explained_variance_ratio_ * 100, decimals=1)
     # print(pca.explained_variance_ratio_)
-    return dataset_pca
+
+    pca = PCA(n_components=2)
+    pca.fit(dataset)
+    dataset_pca_2d = pca.transform(dataset)
+
+    pca = PCA(n_components=3)
+    pca.fit(dataset)
+    dataset_pca_3d = pca.transform(dataset)
+
+    return dataset_pca_2d,dataset_pca_3d,per_var
 
 
 """Clustering"""
@@ -1198,6 +1211,8 @@ app.layout = html.Div(
                     children=[
                         html.Div([
                             html.Div([
+                            html.Div(children=[html.Div(className="section-banner2",children="Previous Step"),html.Div(id='pphistory',className='hist')],className='history'),
+                            html.Div([
                                 html.Label([
                                     "Embedding method",
                                     dcc.Dropdown(
@@ -1272,17 +1287,18 @@ app.layout = html.Div(
                                     dcc.Interval(id='interval_component',interval= 1000,n_intervals=0)
                                 ], className="scroll_container_hist"),
 
-                            ], className="pretty_container_side1 four columns",
-                            ),
+                            ], className="pretty_container_side1 ",
+                            )],className='four columns'),
 
                             html.Div([
-                                html.Div(id='learn', children=[], className="pretty_container_embedding_graph")
+                                html.Div(id='learn', children=[], className="pretty_container_embedding_graph"),
+                                html.Div(id='loading_plot', children=[], className="scroll_container_graph")
+
                             ],
                                 id="embedding_right-column",
                                 className="eight columns",
                             ),
-                        ]
-                            , className="column flex-display"
+                        ]                            , className="column flex-display"
                         )]),
                 dcc.Tab(
                     id="Clustering-tab",
@@ -1292,6 +1308,9 @@ app.layout = html.Div(
                     selected_className="custom-tab--selected",
                     children=[
                         html.Div([
+                            html.Div([
+                            html.Div(
+                                children=[html.Div(className="section-banner2",children="Previous Steps"),html.Div(id='emhistory1',className='hist'),html.Div(id='emhistory',className='hist2'),],className='history'),
                             html.Div([
                                 html.Label([
                                     "Clustering method",
@@ -1337,9 +1356,9 @@ app.layout = html.Div(
                                             value=''
                                     ),className='silhouette_radio'),],className='silhouette'),
 
-                            ], className="pretty_container_side1 four columns",
+                            ], className="pretty_container_side1 ",
 
-                            ),
+                            )],className='four columns'),
                             html.Div([
                                 html.Div(id='Cluster_Plot', children=[], className="scroll_container_plot", ),
                                 html.Div(id='Cluster_Graph&Hover',style={'display': 'flex'},
@@ -1481,6 +1500,7 @@ def show_graph(n_clicks, VC):
                             "xaxis": dict(
                                 showline=False, showgrid=False, zeroline=False
                             ),
+                    'xaxis_title': "time",
                             "yaxis": dict(
                                 showgrid=False, showline=False, zeroline=False
                             ),
@@ -1496,7 +1516,9 @@ def show_graph(n_clicks, VC):
 
 
 # slice 모달 창 띄우기
-@app.callback(Output('modal', "is_open"),
+@app.callback([Output('modal', "is_open"),
+                Output('pphistory', "children"),
+               Output('emhistory1', "children"),],
               [Input('slice-btn', 'n_clicks'),
                Input('cut_radio', 'value'),
                Input('PCN', 'value'),
@@ -1517,9 +1539,9 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global cutting_dataset_pure
     global csv_file_name
     global change_cutting_method
-
+    global pphist
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
-
+    pre='Preprocessing Method : '
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
     if 'slice-btn' in changed_id:
         change_cutting_method += 1
@@ -1535,7 +1557,7 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
             for i in range(len(cutting_dataset_pure)):
                 dataset_pure_list.append(cutting_dataset_pure[i])
                 process_label.append(i)
-
+            pphist=pre+'Sliding Window'
         # Process 존재 O
         else:
             try:
@@ -1561,15 +1583,16 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
                 cutting_dataset = data_dtw(dataset)
                 cutting_dataset_pure = data_dtw(dataset_pure)
                 print("DTW: ", cutting_dataset_pure.shape)
+            pphist=pre+cut_radio
 
-        return not is_open
+        return [not is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
     elif 'close-md' in changed_id:
         if is_open:
             is_open = False
 
-        return is_open
+        return [is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
     else:
-        return None
+        return [None,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
 
 
 from dash_extensions.snippets import send_data_frame
@@ -1677,7 +1700,9 @@ def show_vector_parameter(embedding_radio):
         return ['', '', '', '', '', '', '', '', '']
 
 
-@app.callback(Output('learn', 'children'),
+@app.callback([Output('learn', 'children'),
+               Output('loading_plot', 'children'),
+               Output('emhistory', 'children'),],
               Input('embedding-btn', 'n_clicks'),
               Input('embedding_radio', 'value'),
 
@@ -1696,7 +1721,7 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
     global embedding_data
     global autoencoder_hist
     global embedding_csv
-
+    global emhist
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     if 'embedding-btn' in changed_id:
@@ -1708,15 +1733,16 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
                                           IMAGING_SIZE_FLAG, TEST_SIZE=1)
 
         elif embedding_radio == 'PCA':
-            embedding_data = embedding_PCA(cutting_dataset)
+            embedding_data,embedding_data_3d,per_var = embedding_PCA(cutting_dataset)
 
         elif embedding_radio == 'UMAP':
-            embedding_data = embedding_UMAP(cutting_dataset, n_neighbors, min_dist)
+            embedding_data,embedding_data_3d = embedding_UMAP(cutting_dataset, n_neighbors, min_dist)
+
 
         embedding_x = []
         embedding_y = []
         embedding_csv = pd.DataFrame()
-
+        emhist='Embedding Method : '+embedding_radio
         for data in embedding_data:
             embedding_x.append(data[0])
             embedding_y.append(data[1])
@@ -1727,27 +1753,83 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
         embedding_csv['X'] = embedding_x
         embedding_csv['Y'] = embedding_y
 
-        children = [
+        if embedding_radio == 'PCA' or embedding_radio == 'UMAP':
+
+            fig = px.scatter_3d(x=embedding_data_3d[:, 0], y=embedding_data_3d[:, 1], z=embedding_data_3d[:, 2],
+                                color_discrete_sequence=["#f45060"],
+                                template='plotly_dark').update_layout({
+                "paper_bgcolor": "rgba(0,0,0,0)",
+                "plot_bgcolor": "rgba(0,0,0,0)",
+                "xaxis": dict(
+                    showline=False, zeroline=False
+                ),
+                "yaxis": dict(
+                    showline=False, zeroline=False
+                ),
+                "autosize": True,
+                "showlegend": False
+            })
+
+            if embedding_radio == 'PCA':
+                labels = ['PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'PC6', 'PC7', 'PC8', 'PC9', 'PC10']
+                bar_fig = px.bar(x=labels, y=per_var, color_discrete_sequence=["#91dfd2"],
+                                 template="plotly_dark", ).update_layout({
+                    "paper_bgcolor": "rgba(0,0,0,0)",
+                    "plot_bgcolor": "rgba(0,0,0,0)",
+                    "xaxis": dict(
+                        showline=False, zeroline=False
+                    ),
+                    "yaxis": dict(
+                        showline=False, zeroline=False
+                    ),
+                    "autosize": True,
+                    "showlegend": False
+                })
+
+        children_for_learn = [
             dcc.Graph(
                 id='embedding-result',
                 style={"width": "100%", "height": "100%"},
-                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
-                            "paper_bgcolor": "rgba(0,0,0,0)",
-                            "plot_bgcolor": "rgba(0,0,0,0)",
-                            "xaxis": dict(
-                                showline=False, zeroline=False
-                            ),
-                            "yaxis": dict(
-                                showline=False, zeroline=False
-                            ),
-                            "autosize": True,
-                            "showlegend":False
-                        })
+                figure=px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color_discrete_sequence=["#f4d44d"],
+                                  template='plotly_dark').update_layout({
+                    "paper_bgcolor": "rgba(0,0,0,0)",
+                    "plot_bgcolor": "rgba(0,0,0,0)",
+                    "xaxis": dict(
+                        showline=False, zeroline=False
+                    ),
+                    "yaxis": dict(
+                        showline=False, zeroline=False
+                    ),
+                    "autosize": True,
+                    "showlegend": False
+                })
             )
         ]
-        return children
+
+        if embedding_radio == 'PCA':
+            children_for_loading = [
+                dcc.Graph(
+                    id='embedding-loading_result',
+                    style={'display': 'inline-block', "autosize": "false", "width": "50%", "height": "100%"},
+                    figure=fig
+                ),
+                dcc.Graph(
+                    id='embedding-variance-result',
+                    style={'display': 'inline-block', "autosize": "false", "width": "50%", "height": "100%"},
+                    figure=bar_fig
+                )
+            ]
+        elif embedding_radio == 'UMAP':
+            children_for_loading = [
+                dcc.Graph(
+                    id='embedding-loading_result',
+                    style={'display': 'inline-block', "autosize": "false", "width": "50%", "height": "100%"},
+                    figure=fig
+                )
+            ]
+        return [children_for_learn,children_for_loading,html.Div(html.Label(emhist))]
     else:
-        return
+        return [None,None,html.Div(html.Label(emhist))]
 
 @app.callback(Output('ae_hist','children'),
               Input('interval_component','n_intervals'))
@@ -1904,9 +1986,30 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                             id='clustering-plot_' + str(centroid_idx[j]),
                             style={'display': 'inline-block', "autosize": "false", "width": "33.3333%",
                                    "height": "100%"},
-                            figure=px.line(dataset_pure_list[centroid_idx[j]], title="DBSCAN Process : " + str(process_label[centroid_idx[j]])+"( {}, {} )".format(round(centroid_value[j][0],2),round(centroid_value[j][1],2)) )
+                            figure=px.line(dataset_pure_list[centroid_idx[j]], title="DBSCAN Process : " + str(process_label[centroid_idx[j]])+"( {}, {} )".format(round(centroid_value[j][0],2),round(centroid_value[j][1],2)) ,labels={'x': 'time'},color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showline=False, showgrid=False, zeroline=False
+                            ),
+                                'xaxis_title': "time",
+                            "yaxis": dict(
+                                showgrid=False, showline=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
                         ))
-                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict,color_discrete_sequence=["#f4d44d","#92e0d3","#f45060","#b050f4","#50f479","#506ef4","#f450d0","#f49d50"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
                 fig.add_trace(
                 go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',
                            marker=dict(color='red'), showlegend=False))
@@ -1917,7 +2020,16 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                         figure=fig)
                 )
             else:
-                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
+                fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict,color_discrete_sequence=["#f4d44d","#92e0d3","#f45060","#b050f4","#50f479","#506ef4","#f450d0","#f49d50"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
 
                 children_Graph.append(
                      dcc.Graph(
@@ -1944,7 +2056,19 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                                 style={'display': 'inline-block', "autosize": "false", "width": "33.3333%",
                                        "height": "100%"},
                                 figure=px.line(dataset_pure_list[idx],
-                                               title="Outlier Process : " + str(process_label[idx]))
+                                               title="Outlier Process : " + str(process_label[idx]),labels={'x': 'time'},color_discrete_sequence=["#f45060"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showline=False, showgrid=False, zeroline=False
+                            ),
+                            'xaxis_title': "time",
+                            "yaxis": dict(
+                                showgrid=False, showline=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
                             ))
 
             # dbscan 에서는 라디오 버튼 안보여야 되니까 style 을 display:none 으로 했어요
@@ -1966,10 +2090,31 @@ def clustering(n_clicks, clustering_radio, MAX_CLUSTER_SIZE, EPS, MIN_SAMPLES):
                             id='clustering-plot_' + str(centroid_idx[j]),
                             figure=px.line(dataset_pure_list[centroid_idx[j]],
                                            title="K-SHAPE Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
-                                               round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
+                                               round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)),labels={'x': 'time'},color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showline=False, showgrid=False, zeroline=False
+                            ),
+                            'xaxis_title' :"time",
+                            "yaxis": dict(
+                                showgrid=False, showline=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
                         ))
 
-            fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
+            fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict,color_discrete_sequence=["#f4d44d","#92e0d3","#f45060","#b050f4","#50f479","#506ef4","#f450d0","#f49d50"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
 
             children_Graph.append(dcc.Graph(
                  id='cluster-result',
@@ -2016,10 +2161,31 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
                     style={'display': 'inline-block', "autosize": "false", "width": "33.3333%", "height": "100%"},
                     figure = px.line(dataset_pure_list[centroid_idx[j]],
                     title="K-MEANS Process : " + str(process_label[centroid_idx[j]]) + "( {}, {} )".format(
-                                 round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)))
+                                 round(centroid_value[j][0], 2), round(centroid_value[j][1], 2)),labels={'x': 'time'},color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                        'xaxis_title': "time",
+                            "yaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
                 ))
 
-        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1], color=predict)
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict,color_discrete_sequence=["#f4d44d","#92e0d3","#f45060","#b050f4","#50f479","#506ef4","#f450d0","#f49d50"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
         fig.add_trace(go.Scatter(x=centroid_value[:, 0], y=centroid_value[:, 1], mode='markers',marker=dict(color='red'), showlegend=False))
 
         children_Graph.append(
@@ -2032,7 +2198,16 @@ def k_means_clustering(k_means_radio,MAX_CLUSTER_SIZE):
         centroid_idx, centroid_value = find_centroid_index(embedding_data, predict)
 
     else:
-        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict)
+        fig = px.scatter(x=embedding_data[:, 0], y=embedding_data[:, 1],color=predict,color_discrete_sequence=["#f4d44d","#92e0d3","#f45060","#b050f4","#50f479","#506ef4","#f450d0","#f49d50"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
 
         children_Graph.append(
             dcc.Graph(
@@ -2091,7 +2266,19 @@ def cluster_hover(hoverData):
                 id='Hover_Process_Plot',
                 figure=px.line(dataset_pure_list[idx],
                                title="Process : " + str(process_label[idx]) + " ({},{})".format(
-                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)))
+                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)),labels={'x': 'time'},color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                    'xaxis_title': "time",
+                            "yaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
             )
         ]
         return children
@@ -2120,7 +2307,18 @@ def k_means_hover(hoverData):
                 id='Hover_Process_Plot',
                 figure=px.line(dataset_pure_list[idx],
                                title="Process : " + str(process_label[idx]) + " ({},{})".format(
-                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)))
+                                   round(hoverData['points'][0]['x'], 2), round(hoverData['points'][0]['y'], 2)),labels={'x': 'time'},color_discrete_sequence=["#f4d44d"],template='plotly_dark').update_layout({
+                            "paper_bgcolor": "rgba(0,0,0,0)",
+                            "plot_bgcolor": "rgba(0,0,0,0)",
+                            "xaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                            "yaxis": dict(
+                                showgrid=False, zeroline=False
+                            ),
+                            "autosize": True,
+                            "showlegend":False
+                        })
             )
         ]
         return children
