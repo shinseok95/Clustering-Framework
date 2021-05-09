@@ -114,6 +114,10 @@ embedding_csv = None
 centroid_idx = None
 centroid_value = None
 
+len_min = None
+len_max = None
+len_mean = None
+
 Kmean = KMeans(n_clusters=5)
 pphist=None
 emhist=None
@@ -137,6 +141,10 @@ def align_timeseries_dataset(path, value_col, process_col=None):
     global pure_csv
     global PATH
     global change_cutting_method
+
+    global len_min
+    global len_max
+    global len_mean
 
     if path == None or value_col == None:
         return
@@ -208,6 +216,19 @@ def align_timeseries_dataset(path, value_col, process_col=None):
             dataset.append(data_pure)
 
         preprocessing_csv['Process'] = process_list
+
+        process_array = np.array(dataset_preprocessing)
+        process_len = []
+
+        for i in range(len(process_array)):
+            process_len.append(process_array[i].shape[0])
+
+        print("len 최대 : ",max(process_len))
+        len_max = max(process_len)
+        print("len 최소 : ",min(process_len))
+        len_min = min(process_len)
+        print("len 평균 : ",sum(process_len,0.0)/len(process_len))
+        len_mean = sum(process_len,0.0)/len(process_len)
 
     preprocessing_csv['Value'] = input_csv[value_col]
     preprocessing_csv['z_score'] = zscore_dataset
@@ -1005,6 +1026,19 @@ def find_centroid_index(embedding, predict):
     return centroid_idx, centroid
 
 
+def cal_rms(arr):
+    square = 0
+    mean = 0.0
+    root = 0.0
+
+    for i in range(len(arr)):
+        square += (arr[i]**2)
+
+    mean = (square / (float)(len(arr)))
+    root = math.sqrt(mean)
+
+    return root
+
 #############################################################
 
 
@@ -1114,8 +1148,49 @@ app.layout = html.Div(
                                                 html.Div(
                                                     className='empty'
                                                 ),
+                                                
+                                                html.Div(children=[
+                                            html.Div(html.H3('Value Info'),style={'display':'inline-block','margin-right':"50px"}),
+                                            html.Div(html.H3('Length Info'),style={'display':'inline-block'})
+                                        ],style={'display':'flex'}),
+
+                                        html.Div(
+                                            children=[
+                                                html.Div(children=[
+                                                    html.Label('Min : ', id='value_min0'),
+                                                    html.Label('Max : ', id='value_max0'),
+                                                    html.Label('Mean : ', id='value_mean0'),
+                                                    html.Label('Variance : ', id='value_variance0'),
+                                                    html.Label('RMS : ', id='value_rms0'),],style={'display':'inline-block'}
+                                                ),
+
+                                                html.Div(children=[
+
+                                                    html.Label('111 ',id='value_min'),
+                                                    html.Label('222',id='value_max'),
+                                                    html.Label('333',id='value_mean'),
+                                                    html.Label('444',id='value_variance'),
+                                                    html.Label('555',id='value_rms'),
+                                                ],style={'display':'inline-block','margin-right':'95px'},id='value_info'),
+
+                                                html.Div(children=[
+                                                    html.Label('Min : ', id='len_min0'),
+                                                    html.Label('Max : ', id='len_max0'),
+                                                    html.Label('Mean : ', id='len_mean0'),
+                                                ],style={'display':'inline-block'}
+                                                ),
+
+                                                html.Div(children=[
+                                                    html.Label('111 ',id='len_min'),
+                                                    html.Label('222',id='len_max'),
+                                                    html.Label('333',id='len_mean'),
+                                                ],style={'display':'inline-block'},id='len_info'),
+
+                                            ],style={'display':'flex'}),
+
+
                                                 html.Div(
-                                                    children=[html.Div(html.Label('Have Process?', className="dcc_control_l2"),className='inline'),
+                                                    children=[html.Div(html.Label('Is it splited?', className="dcc_control_l2"),className='inline'),
                                                               html.Div(
                                                             dcc.RadioItems(id='chk-process',
                                                                            options=[{'label': ' O ', 'value': 'o'},{'label': ' X ',
@@ -1475,7 +1550,14 @@ def update_output(list_of_contents, list_of_names, list_of_dates):
 
 # Show Graph 버튼 누르면 그래프 보여주는 함수
 
-@app.callback(Output('GraphContainer', 'children'),
+@app.callback([Output('GraphContainer', 'children'),
+               Output('value_min', 'children'),
+               Output('value_max', 'children'),
+               Output('value_mean', 'children'),
+               Output('value_variance', 'children'),
+               Output('value_rms','children'),
+               Output('value_info','style')],
+
               Input('graph-btn', 'n_clicks'),
               Input('VC', 'value'))
 def show_graph(n_clicks, VC):
@@ -1489,6 +1571,12 @@ def show_graph(n_clicks, VC):
         df = df.astype({VC: 'float32'})
         dataset = df[VC].to_numpy()
         dataset_pure = dataset
+
+        value_min = str(dataset_pure.min())
+        value_max = str(dataset_pure.max())
+        value_mean = str(dataset_pure.mean())
+        value_variance = str(dataset_pure.var())
+        value_rms = cal_rms(dataset_pure)
 
         children = [
             dcc.Graph(
@@ -1510,15 +1598,18 @@ def show_graph(n_clicks, VC):
 
             )
         ]
-        return children
+        return [children, value_min, value_max, value_mean, value_variance,value_rms,{'display':'inline-block','margin-right':'25px'}]
     else:
-        return
+        return ['', 'ㅤ', 'ㅤ', 'ㅤ', 'ㅤ','ㅤ',{'display':'inline-block','margin-right':'95px'}]
 
 
 # slice 모달 창 띄우기
 @app.callback([Output('modal', "is_open"),
                 Output('pphistory', "children"),
-               Output('emhistory1', "children"),],
+               Output('emhistory1', "children"),
+               Output('len_min','children'),
+              Output('len_max','children'),
+              Output('len_mean','children'),],
               [Input('slice-btn', 'n_clicks'),
                Input('cut_radio', 'value'),
                Input('PCN', 'value'),
@@ -1539,7 +1630,13 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global cutting_dataset_pure
     global csv_file_name
     global change_cutting_method
+
     global pphist
+
+    global len_min
+    global len_max
+    global len_mean
+
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     pre='Preprocessing Method : '
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
@@ -1585,14 +1682,14 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
                 print("DTW: ", cutting_dataset_pure.shape)
             pphist=pre+cut_radio
 
-        return [not is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
+        return [not is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist)),'','','']
     elif 'close-md' in changed_id:
         if is_open:
             is_open = False
 
-        return [is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
+        return [is_open,html.Div(html.Label(pphist)),html.Div(html.Label(pphist)),len_min,len_max,len_mean]
     else:
-        return [None,html.Div(html.Label(pphist)),html.Div(html.Label(pphist))]
+        return [None,html.Div(html.Label(pphist)),html.Div(html.Label(pphist)),'','','']
 
 
 from dash_extensions.snippets import send_data_frame
