@@ -37,6 +37,14 @@ body {
   padding :15px 20px 15px 20px;
 
 }
+.img{
+ margin: 3px;
+}
+.img2{
+ margin: 3px;
+ width:88px;
+ height:29px;
+}
 .hist{
   padding : 15px 20px 15px 20px;
 
@@ -48,6 +56,7 @@ body {
 .history{
   background-color: #161a28 !important;
   border-radius:5px;
+  margin: 5px 0px 15px 15px;
 }
 .title{
   float:left;
@@ -61,7 +70,7 @@ body {
 .pretty_container_side1 {
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 0px 35px 0px;
+  margin: 5px 0px 35px 15px;
   padding: 25px;
 
 }
@@ -90,12 +99,12 @@ body {
 
 .pretty_container_preprocessing_df {
   color : #fff !important;
-  height: 300px;
-  width: 96.5%;
+  height: 260px;
+  width: 96%;
   border-radius: 5px;
   background-color: #161a28;
   margin: 5px 5px 25px 20px;
-  padding: 10px;
+  padding: 9px 25px 8px 25px;
 
 }
 .custom-tabs {
@@ -153,16 +162,16 @@ body {
   border-radius: 5px;
   overflow-y: scroll;
   background-color: #161a28;
-  margin: 25px;
-  padding: 15px;
 
+  margin: 5px 5px 25px 20px;
+  padding: 10px;
 }
 .scroll_container_graph {
   height: 450px;
   width: 96%;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 25px;
+  margin: 5px 5px 25px 20px;
   padding: 15px;
 
 }
@@ -173,7 +182,7 @@ body {
   overflow-y: scroll;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 25px;
+  margin: 5px 5px 25px 20px;
   padding: 15px;
 
 
@@ -207,7 +216,7 @@ body {
   padding: 0 0 0 0;
 }
 .empty{
-  padding: 20px;
+  padding: 10px;
 }
 .empty2{
   padding: 0px;
@@ -226,7 +235,7 @@ body {
 }
 .dcc_control_l2 {
   margin: 0;
-  padding: 3px;
+  padding: 7px 3px 0px 3px;
   width: calc(100%);
   display:inline-block;
 }
@@ -321,7 +330,7 @@ body {
 padding:2px;
 }
 .radio_image2{
-padding:2px;
+padding:2px 5px 2px 5px;
 }
 .inline_flex_image{
   background-color: #1e2130;
@@ -332,7 +341,7 @@ padding:2px;
 .dcc_control_image {
   background-color: #1e2130;
   margin: 0;
-  padding: 20px 8px 20px 8px ;
+  padding: 20px 15px 20px 8px ;
   width: calc(45%);
   display:inline-block;
   border-right: 1px solid #acaeb0;
@@ -355,11 +364,22 @@ padding:2px;
   color: #f3f5f4 !important;
   padding :3px;
 }
+.pro_val{
+  display: inline-block;
+  width:45%;
+  margin:10px 10px 23px 10px;
+}
+.input_val {
+  margin-top: 3px;
+  padding: 5px;
+  width: 100%;
+  color: #000000 !important;
+}
 .label_tm{
   margin-top: 15px;
 }
 .label_bm{
-  margin-bottom: 5px;
+  margin: 0px 5px 5px 5px;
 }
 .dcc_control {
   color: #000000 !important;
@@ -398,15 +418,36 @@ padding:2px;
   display:inline-block;
 }
 .dcc_control3 {
-  width: 170px;
+  width: 330px;
   margin-top: 3px;
   color: #000000 !important;
   display:inline-block;
 }
+.info{
+  display:inline-block;
+  width:35%;
+  margin:1px 3px 1px 3px;
+}
+.info2{
+  display:inline-block;
+  width:18%;
+}
+.info3{
+display:flex;
+padding: 0px 10px 15px 10px;}
+.info_half{
+display:inline-flex;
+width:50%;
+margin: 0px 5px 0px 20px;
+}
+.info_label{
+display:inline-block;
+width:50%;
+margin :0px 0px 0px 30px;}
 .dcc_input_p{
 margin-top:5px;
-padding-left: 3px;
-padding-right:20px;
+padding-left: 15px;
+padding-right:25px;
 }
 .inline_flex{
 display:inline-flex;}
@@ -418,9 +459,9 @@ display:inline-flex;
   padding-top:10px;
   }
 .dcc_btn1 {
-  margin-left: 5px;
+  margin: 10px;
   padding: 0px;
-  width: calc(25%);
+  width: calc(100%);
   display=inline-block;
   background-color: #2d3038;
   color: #f3f5f4;
