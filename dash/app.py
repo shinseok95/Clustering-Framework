@@ -602,8 +602,9 @@ def embedding_AE(dataset, LEARNING_LATE, BATCH_SIZE, EPOCHS, IMAGING_FLAG='1', I
 
         execution_time = round(end - start, 3)
 
-        result = str(i) + " / " + str(EPOCHS) + " [ " + str(execution_time) + " ms ]" + " - loss : " + str(
-            np.round(hist.history["loss"], 4)) + " / val_loss : " + str(np.round(hist.history["val_loss"], 4))
+        result = str(i) + "  /  " + str(EPOCHS) + "  [  " + str(execution_time) + "  ms  ] " + "  -  loss  :  " + str(
+            np.round(hist.history["loss"], 4))
+                 # + " / val_loss : " + str(np.round(hist.history["val_loss"], 4))
 
         print(result)
         autoencoder_hist.append(result)
@@ -1726,7 +1727,7 @@ def time_slice(n_clicks, cut_radio, pcn, vc, time_s, shift_s, n_clicks2, chk, is
     global pphist
 
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
-    pre = 'Preprocessing Method : '
+    pre = 'Preprocessing : '
     # slice-btn 누르거나 close-md(모달창 열렸을때 보이는 close 버튼) 눌렀을 때
     if 'slice-btn' in changed_id:
         change_cutting_method += 1
@@ -1913,7 +1914,6 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
     if 'embedding-btn' in changed_id:
-        emhist = 'Embedding Method : ' + embedding_radio
 
         if embedding_radio == 'Autoencoder':
 
@@ -1927,7 +1927,6 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
 
         elif embedding_radio == 'UMAP':
             embedding_data, embedding_data_3d = embedding_UMAP(cutting_dataset, n_neighbors, min_dist)
-            emhist += " ( n_neighbors - " + str(n_neighbors) + " , min_dist - " + str(min_dist) + " )"
         embedding_x = []
         embedding_y = []
         embedding_csv = pd.DataFrame()
@@ -1948,11 +1947,11 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
                                 template='plotly_dark').update_layout({
                 "paper_bgcolor": "rgba(0,0,0,0)",
                 "plot_bgcolor": "rgba(0,0,0,0)",
-                "xaxis": dict(
-                    showline=False, zeroline=False
+                "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+
                 ),
-                "yaxis": dict(
-                    showline=False, zeroline=False
+                "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+
                 ),
                 "autosize": True,
                 "showlegend": False
@@ -1982,11 +1981,11 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
                                   template='plotly_dark').update_layout({
                     "paper_bgcolor": "rgba(0,0,0,0)",
                     "plot_bgcolor": "rgba(0,0,0,0)",
-                    "xaxis": dict(
-                        showline=False, zeroline=False
+                    "xaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+
                     ),
-                    "yaxis": dict(
-                        showline=False, zeroline=False
+                    "yaxis": dict(showline=False,linewidth=0.5,zerolinewidth=0.5, linecolor='#98a0a3',mirror=True,gridcolor='#98a0a3', zeroline=True,zerolinecolor='#c9cfd1'
+
                     ),
                     "autosize": True,
                     "showlegend": False
@@ -2015,8 +2014,20 @@ def deep_learning(n_clicks, embedding_radio, learning_rate, batch_size, epoch, I
                     figure=fig
                 )
             ]
-        return [children_for_learn, children_for_loading, html.Div(html.Label(emhist))]
+
+        if embedding_radio == 'Autoencoder':
+            emhist = 'Embedding : AE'
+            emhist += " ( learning_rate - " + str(learning_rate) + " , batch_size - " + str(batch_size) + " , epoch - " + str(epoch) + " )"
+
+            return [children_for_learn, None, html.Div(html.Label(emhist))]
+
+        else:
+            emhist = 'Embedding : ' + embedding_radio
+            if embedding_radio == 'UMAP':
+                emhist += " ( n_neighbors - " + str(n_neighbors) + " , min_dist - " + str(min_dist) + " )"
+            return [children_for_learn, children_for_loading, html.Div(html.Label(emhist))]
     else:
+
         return [None, None, html.Div(html.Label(emhist))]
 
 

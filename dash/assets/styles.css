@@ -56,7 +56,7 @@ body {
 .history{
   background-color: #161a28 !important;
   border-radius:5px;
-  margin: 5px 0px 15px 15px;
+  margin: 5px 0px 15px 0px;
 }
 .title{
   float:left;
@@ -70,7 +70,7 @@ body {
 .pretty_container_side1 {
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 0px 35px 15px;
+  margin: 5px 0px 35px 0px;
   padding: 25px;
 
 }
@@ -100,10 +100,10 @@ body {
 .pretty_container_preprocessing_df {
   color : #fff !important;
   height: 260px;
-  width: 96%;
+  width: 96.9%;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 9px 25px 8px 25px;
 
 }
@@ -114,6 +114,7 @@ body {
   font-size: 14px;
   height: fit-content;
   cursor: pointer;
+  padding: 0px 10px 0px 10px;
 }
 
 .custom-tab{
@@ -129,7 +130,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  margin: 0px 0px 7px 7px;
+  margin: 0px 7px 7px 7px;
 }
 
 .custom-tab--selected {
@@ -138,63 +139,65 @@ body {
 }
 .pretty_container_preprocessing_graph {
   height: 500px;
-  width: 96.5%;
+  width: 96.9%;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 10px;
 
 }
 
 .pretty_container_embedding_graph {
   height: 700px;
-  width: 96%;
+  width: 96.9%;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 15px;
 
 }
 
 .scroll_container_plot {
   height: 400px;
-  width: 96%;
+  width: 96.9%;
   border-radius: 5px;
   overflow-y: scroll;
   background-color: #161a28;
 
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 10px;
 }
 .scroll_container_graph {
   height: 450px;
-  width: 96%;
+  width: 96.9%;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 15px;
 
 }
 
 .scroll_container_outlier {
   height: 400px;
-  width: 96%;
+  width: 96.9%;
   overflow-y: scroll;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 5px 5px 25px 20px;
+  margin: 5px 5px 15px 10px;
   padding: 15px;
 
 
 }
 .scroll_container_hist {
   height: 200px;
-  width: 96%;
+  width: 98%;
   overflow-y: scroll;
+  border:#98a0a3 0.5px solid ;
   border-radius: 5px;
   background-color: #161a28;
-  margin: 25px 25px 0px 25px;
-  padding: 15px;
+  margin: 25px 35px 10px 5px;
+  padding: 15px 35px 15px 30px;
+  white-space:pre;
 
 }
 
@@ -434,7 +437,7 @@ padding:2px 5px 2px 5px;
 }
 .info3{
 display:flex;
-padding: 0px 10px 15px 10px;}
+padding: 0px 10px 10px 10px;}
 .info_half{
 display:inline-flex;
 width:50%;
